@@ -15,7 +15,11 @@ As in previous assignments, we use `uv` to manage dependencies.
 1. Install all packages except `flash-attn`, then all packages (`flash-attn` is weird)
 ```
 uv sync --no-install-package flash-attn
-uv sync
+uv sync # if this takes too long, see instructions below to install flash-attn manually
+
+bash get-flash-attn.sh
+uv pip install flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
+uv sync # to make sure everything is installed
 ```
 
 2. Run unit tests:
