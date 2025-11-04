@@ -20,10 +20,15 @@ dependencies = [
     "vllm==0.7.2",
     "wandb>=0.19.8",
     "xopen>=2.0.2",
+    "datasets>=2.14.4",
 ]
 
 [tool.setuptools.packages.find]
 include = ["cs336_alignment"]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple"
+default = true
 
 [tool.uv]
 package = true

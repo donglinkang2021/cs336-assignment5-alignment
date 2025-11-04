@@ -32,3 +32,22 @@ Initially, all tests should fail with `NotImplementedError`s.
 To connect your implementation to the tests, complete the
 functions in [./tests/adapters.py](./tests/adapters.py).
 
+## Data
+
+```bash
+du -h --max-depth=1 $HF_HOME/hub/
+```
+
+遇到报错
+
+```bash
+Loading a dataset cached in a LocalFileSystem is not supported.
+```
+
+解决方法：更新fsspec和datasets包
+
+```bash
+uv remove fsspec datasets
+uv pip install -U fsspec
+uv pip install -U datasets
+```
