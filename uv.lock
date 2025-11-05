@@ -140,6 +140,7 @@ dependencies = [
     { name = "jupyter" },
     { name = "math-verify", extra = ["antlr4-13-2"] },
     { name = "notebook" },
+    { name = "nvitop" },
     { name = "pylatexenc" },
     { name = "pytest" },
     { name = "torch" },
@@ -160,6 +161,7 @@ requires-dist = [
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "math-verify", extras = ["antlr4-13-2"], specifier = ">=0.7.0" },
     { name = "notebook", specifier = ">=7.4.2" },
+    { name = "nvitop", specifier = ">=1.5.3" },
     { name = "pylatexenc", specifier = "==2.10" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "torch" },
@@ -2004,6 +2006,21 @@ wheels = [
 ]
 
 [[package]]
+name = "nvitop"
+version = "1.5.3"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "nvidia-ml-py" },
+    { name = "psutil" },
+    { name = "windows-curses", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/70/28/0001f0d383216f9b2f23abae9f7b7a2e4a946d8def86155d8198fca6742e/nvitop-1.5.3.tar.gz", hash = "sha256:ab50fbcfb986607d36f4dd07e124cb5582290d7f7efb2e1d97635b4487fac1fb" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/0e/b1/ed611dd58dec3a3a54a410fbf3c57511b76cef0adc5f03e6448b0749c514/nvitop-1.5.3-py3-none-any.whl", hash = "sha256:5a58c8aea1a021ab0d3c4f1ceffca9335d82326ad7fbe0c6cd9d1f7b955777a5" },
+]
+
+[[package]]
 name = "openai"
 version = "1.78.1"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
@@ -3734,6 +3751,17 @@ source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
 sdist = { url = "https://mirrors.aliyun.com/pypi/packages/41/53/2e0253c5efd69c9656b1843892052a31c36d37ad42812b5da45c62191f7e/widgetsnbextension-4.0.14.tar.gz", hash = "sha256:a3629b04e3edb893212df862038c7232f62973373869db5084aed739b437b5af" }
 wheels = [
     { url = "https://mirrors.aliyun.com/pypi/packages/ca/51/5447876806d1088a0f8f71e16542bf350918128d0a69437df26047c8e46f/widgetsnbextension-4.0.14-py3-none-any.whl", hash = "sha256:4875a9eaf72fbf5079dc372a51a9f268fc38d46f767cbf85c43a36da5cb9b575" },
+]
+
+[[package]]
+name = "windows-curses"
+version = "2.4.1"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/74/b3/46a2508fff83b5affb5a311797c584c494b4b0c4c8796a1afa2c1b1e03ac/windows_curses-2.4.1-cp311-cp311-win32.whl", hash = "sha256:4fa1a176bfcf098d0c9bb7bc03dce6e83a4257fc0c66ad721f5745ebf0c00746" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/50/29/fd7c0c80177d8df55f841504a5f332b95b0002c80f82055913b6caac94e6/windows_curses-2.4.1-cp311-cp311-win_amd64.whl", hash = "sha256:fd7d7a9cf6c1758f46ed76b8c67f608bc5fcd5f0ca91f1580fd2d84cf41c7f4f" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/f4/99/60f34e51514c82631aa5c6d21eab88ce1701562de9844608411e39462a46/windows_curses-2.4.1-cp312-cp312-win32.whl", hash = "sha256:bdbe7d58747408aef8a9128b2654acf6fbd11c821b91224b9a046faba8c6b6ca" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/62/8f/d908bcab1954375b156a9300fa86ceccb110f39457cd6fd59c72777626ab/windows_curses-2.4.1-cp312-cp312-win_amd64.whl", hash = "sha256:5c9c2635faf171a229caca80e1dd760ab00db078e2a285ba2f667bbfcc31777c" },
 ]
 
 [[package]]

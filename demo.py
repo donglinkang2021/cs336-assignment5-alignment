@@ -14,7 +14,9 @@ sampling_params = SamplingParams(
 )
 
 # Create an LLM.
-llm = LLM(model="Qwen/Qwen2.5-Math-1.5B")
+# llm = LLM(model="models/Qwen2.5-Math-1.5B")
+# llm = LLM(model="models/Llama-3.1-8B")
+llm = LLM(model="models/Llama-3.3-70B-Instruct", tensor_parallel_size=8)
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.
 outputs = llm.generate(prompts, sampling_params)
