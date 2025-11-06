@@ -698,14 +698,7 @@
                         {left: '$$', right: '$$', display: true},
                         {left: '$', right: '$', display: false},
                         {left: '\\[', right: '\\]', display: true},
-                        {left: '\\(', right: '\\)', display: false},
-                        {left: '\\begin{equation}', right: '\\end{equation}', display: true},
-                        {left: '\\begin{align}', right: '\\end{align}', display: true},
-                        {left: '\\begin{align*}', right: '\\end{align*}', display: true},
-                        {left: '\\begin{alignat}', right: '\\end{alignat}', display: true},
-                        {left: '\\begin{gather}', right: '\\end{gather}', display: true},
-                        {left: '\\begin{gather*}', right: '\\end{gather*}', display: true},
-                        {left: '\\begin{CD}', right: '\\end{CD}', display: true}
+                        {left: '\\(', right: '\\)', display: false}
                     ],
                     throwOnError: false,
                     trust: true
@@ -735,13 +728,66 @@
             `;
         }
         
+        // Preprocess LaTeX to wrap bare environments
+        function preprocessLatex(text) {
+            // List of LaTeX environments that should be in display mode
+            const envs = ['align\\*', 'align', 'equation\\*', 'equation', 'gather\\*', 'gather', 
+                         'alignat\\*', 'alignat', 'eqnarray\\*', 'eqnarray', 'split', 'multline\\*', 'multline'];
+            
+            let processed = text;
+            
+            for (const env of envs) {
+                // Create regex to find \begin{env}...\end{env} blocks
+                const regex = new RegExp(`\\\\begin\\{${env}\\}[\\s\\S]*?\\\\end\\{${env}\\}`, 'g');
+                let matches = [];
+                let match;
+                
+                // Find all matches and their positions
+                while ((match = regex.exec(processed)) !== null) {
+                    matches.push({
+                        text: match[0],
+                        index: match.index,
+                        length: match[0].length
+                    });
+                }
+                
+                // Process matches in reverse order to maintain indices
+                for (let i = matches.length - 1; i >= 0; i--) {
+                    const m = matches[i];
+                    const before = processed.substring(Math.max(0, m.index - 3), m.index);
+                    const after = processed.substring(m.index + m.length, Math.min(processed.length, m.index + m.length + 3));
+                    
+                    // Check if NOT already wrapped in $$ or \[ \]
+                    const hasDoubleDollarBefore = before.endsWith('$$');
+                    const hasDoubleDollarAfter = after.startsWith('$$');
+                    const hasBracketBefore = before.endsWith('\\[');
+                    const hasBracketAfter = after.startsWith('\\]');
+                    
+                    if (!hasDoubleDollarBefore && !hasDoubleDollarAfter && !hasBracketBefore && !hasBracketAfter) {
+                        // Wrap with \[ \]
+                        processed = processed.substring(0, m.index) + 
+                                  '\\[' + m.text + '\\]' + 
+                                  processed.substring(m.index + m.length);
+                    }
+                }
+            }
+            
+            return processed;
+        }
+        
         // Render field content
         function renderField(value) {
             const strValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
             
-            // Always show raw text with proper formatting
-            const rendered = escapeHtml(strValue).replace(/\n/g, '<br>');
-            return `<div class="field-content raw">${rendered}</div>`;
+            // Preprocess LaTeX environments to wrap them
+            const processedValue = preprocessLatex(strValue);
+            
+            // Create a div and set textContent to avoid XSS, but preserve LaTeX
+            const div = document.createElement('div');
+            div.className = 'field-content raw';
+            div.textContent = processedValue;
+            
+            return div.outerHTML;
         }
         
         // Show error message
