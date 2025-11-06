@@ -345,6 +345,53 @@
             text-decoration: underline;
         }
         
+        /* Asymptote code block styles */
+        .asy-block {
+            position: relative;
+            margin: 0.5em 0;
+        }
+        
+        .asy-block pre {
+            background: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 0;
+            font-size: 0.95em;
+            overflow-x: auto;
+        }
+        
+        .asy-block code {
+            background: none;
+            padding: 0;
+            color: #24292f;
+        }
+        
+        .copy-btn {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            background: white;
+            border: 1px solid #d0d7de;
+            border-radius: 4px;
+            cursor: pointer;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+            color: #24292f;
+        }
+        
+        .copy-btn:hover {
+            opacity: 1;
+            background: #f6f8fa;
+        }
+        
+        .copy-btn.copied {
+            color: var(--success-color);
+            border-color: var(--success-color);
+        }
+        
         /* KaTeX styles */
         .katex-display {
             margin: 1em 0;
@@ -793,17 +840,51 @@
             return processed;
         }
         
+        // Process [asy]...[/asy] blocks into GitHub-style code blocks
+        function processAsyBlocks(text) {
+            const asyRegex = /\[asy\]([\s\S]*?)\[\/asy\]/g;
+            
+            return text.replace(asyRegex, (match, code) => {
+                const escapedCode = escapeHtml(code.trim());
+                const id = 'asy-' + Math.random().toString(36).substr(2, 9);
+                return `<div class="asy-block"><button class="copy-btn" onclick="copyAsyCode('${id}')">Copy</button><pre><code id="${id}">${escapedCode}</code></pre></div>`;
+            });
+        }
+        
+        // Copy Asymptote code to clipboard
+        function copyAsyCode(id) {
+            const codeElement = document.getElementById(id);
+            const button = event.target;
+            
+            navigator.clipboard.writeText(codeElement.textContent).then(() => {
+                const originalText = button.textContent;
+                button.textContent = '✓ Copied';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                button.textContent = '✗ Failed';
+            });
+        }
+        
         // Render field content
         function renderField(value) {
             const strValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
             
             // Preprocess LaTeX environments to wrap them
-            const processedValue = preprocessLatex(strValue);
+            let processedValue = preprocessLatex(strValue);
+            
+            // Process [asy]...[/asy] blocks
+            processedValue = processAsyBlocks(processedValue);
             
             // Create a div and set textContent to avoid XSS, but preserve LaTeX
             const div = document.createElement('div');
             div.className = 'field-content raw';
-            div.textContent = processedValue;
+            div.innerHTML = processedValue;
             
             return div.outerHTML;
         }
