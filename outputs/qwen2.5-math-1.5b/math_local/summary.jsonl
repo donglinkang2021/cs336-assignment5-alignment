@@ -1,0 +1,22 @@
+{
+  "total_examples": 500,
+  "aggregate_metrics": {
+    "answer_reward": 0.018,
+    "format_reward": 0.17,
+    "reward": 0.018
+  },
+  "category_breakdown": {
+    "category_1_format1_answer1": {
+      "count": 9,
+      "percentage": 1.7999999999999998
+    },
+    "category_2_format1_answer0": {
+      "count": 76,
+      "percentage": 15.2
+    },
+    "category_3_format0_answer0": {
+      "count": 415,
+      "percentage": 83.0
+    }
+  }
+}

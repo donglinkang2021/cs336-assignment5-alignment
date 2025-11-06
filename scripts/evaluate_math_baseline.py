@@ -14,7 +14,7 @@ Usage:
         --model-name-or-path models/Qwen2.5-Math-1.5B \
         --dataset-type local \
         --data-path data/Math/validation.jsonl \
-        --output-path outputs/competition_math_results.jsonl \
+        --output-dir outputs/competition_math_results.jsonl \
         --num-gpus 1
     
     # Use HuggingFace dataset
@@ -23,7 +23,7 @@ Usage:
         --dataset-type huggingface \
         --dataset-name HuggingFaceH4/MATH-500 \
         --dataset-split test \
-        --output-path outputs/math500_results.jsonl \
+        --output-dir outputs/math500_results.jsonl \
         --num-gpus 1
 """
 
@@ -116,7 +116,7 @@ def evaluate_vllm(
     reward_fn: Callable[[str, str], dict[str, float]],
     dataset: Dataset,
     eval_sampling_params: SamplingParams,
-    output_path: str,
+    output_dir: str,
 ) -> None:
     """
     Evaluate a language model on a dataset,
@@ -127,7 +127,7 @@ def evaluate_vllm(
         reward_fn: The reward function to use for evaluation
         dataset: HuggingFace Dataset with 'prompt' and 'ground_truth' fields
         eval_sampling_params: Sampling parameters for generation
-        output_path: Path to save results
+        output_dir: Directory to save results (will contain results.jsonl and summary.jsonl)
     """
     prompts = dataset["prompt"]
     ground_truths = dataset["ground_truth"]
@@ -168,40 +168,69 @@ def evaluate_vllm(
         }
         results.append(result)
     
-    # Save results to disk
-    logger.info(f"Saving results to {output_path}...")
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create output directory
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    with xopen(output_path, "w") as f:
+    # Save detailed results to results.jsonl
+    results_path = output_dir / "results.jsonl"
+    logger.info(f"Saving detailed results to {results_path}...")
+    with xopen(results_path, "w") as f:
         for result in results:
             f.write(json.dumps(result) + "\n")
     
-    # Calculate and log aggregate metrics
+    # Calculate aggregate metrics
+    aggregate_metrics = {}
+    for key in sorted(all_metrics[0].keys()):
+        aggregate_metrics[key] = mean([m[key] for m in all_metrics])
+    
+    # Calculate category breakdown
+    category_1 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 1.0)
+    category_2 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 0.0)
+    category_3 = sum(1 for m in all_metrics if m["format_reward"] == 0.0 and m["answer_reward"] == 0.0)
+    
+    total = len(all_metrics)
+    
+    # Create summary
+    summary = {
+        "total_examples": total,
+        "aggregate_metrics": aggregate_metrics,
+        "category_breakdown": {
+            "category_1_format1_answer1": {
+                "count": category_1,
+                "percentage": category_1 / total * 100
+            },
+            "category_2_format1_answer0": {
+                "count": category_2,
+                "percentage": category_2 / total * 100
+            },
+            "category_3_format0_answer0": {
+                "count": category_3,
+                "percentage": category_3 / total * 100
+            }
+        }
+    }
+    
+    # Save summary to summary.jsonl
+    summary_path = output_dir / "summary.jsonl"
+    logger.info(f"Saving summary to {summary_path}...")
+    with xopen(summary_path, "w") as f:
+        f.write(json.dumps(summary, indent=2) + "\n")
+    
+    # Log aggregate metrics
     logger.info("=" * 80)
     logger.info("Evaluation Results:")
     logger.info("=" * 80)
-    for key in sorted(all_metrics[0].keys()):
-        metric_value = mean([m[key] for m in all_metrics])
-        logger.info(f"{key}: {metric_value:.4f}")
+    for key, value in aggregate_metrics.items():
+        logger.info(f"{key}: {value:.4f}")
     
     # Log category breakdown
     logger.info("=" * 80)
     logger.info("Category Breakdown:")
     logger.info("=" * 80)
-    
-    # Category 1: correct with both format and answer reward 1
-    category_1 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 1.0)
-    logger.info(f"Category 1 (format=1, answer=1): {category_1} ({category_1/len(all_metrics)*100:.2f}%)")
-    
-    # Category 2: format reward 1 and answer reward 0
-    category_2 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 0.0)
-    logger.info(f"Category 2 (format=1, answer=0): {category_2} ({category_2/len(all_metrics)*100:.2f}%)")
-    
-    # Category 3: format reward 0 and answer reward 0
-    category_3 = sum(1 for m in all_metrics if m["format_reward"] == 0.0 and m["answer_reward"] == 0.0)
-    logger.info(f"Category 3 (format=0, answer=0): {category_3} ({category_3/len(all_metrics)*100:.2f}%)")
-    
+    logger.info(f"Category 1 (format=1, answer=1): {category_1} ({category_1/total*100:.2f}%)")
+    logger.info(f"Category 2 (format=1, answer=0): {category_2} ({category_2/total*100:.2f}%)")
+    logger.info(f"Category 3 (format=0, answer=0): {category_3} ({category_3/total*100:.2f}%)")
     logger.info("=" * 80)
 
 
@@ -255,10 +284,10 @@ def main(args):
         reward_fn=r1_zero_reward_fn,
         dataset=dataset,
         eval_sampling_params=sampling_params,
-        output_path=args.output_path,
+        output_dir=args.output_dir,
     )
     
-    logger.info(f"Evaluation complete! Results saved to {args.output_path}")
+    logger.info(f"Evaluation complete! Results saved to {args.output_dir}")
 
 
 if __name__ == "__main__":
@@ -300,10 +329,10 @@ if __name__ == "__main__":
         help="Dataset split to load (for dataset_type='huggingface'), e.g., 'test'",
     )
     parser.add_argument(
-        "--output-path",
+        "--output-dir",
         type=str,
-        default="outputs/math_baseline_results.jsonl",
-        help="Path to save evaluation results",
+        default="outputs/math_baseline",
+        help="Directory to save evaluation results (will contain results.jsonl and summary.jsonl)",
     )
     parser.add_argument(
         "--num-gpus",
