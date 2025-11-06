@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSONL Viewer - Markdown & LaTeX Renderer</title>
+    
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.0/marked.min.js"></script>
+    
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+    
+    <!-- Highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #2c3e50;
+            --background-color: #f5f7fa;
+            --card-background: #ffffff;
+            --border-color: #e1e8ed;
+            --text-color: #2c3e50;
+            --text-secondary: #7f8c8d;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow);
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        
+        .subtitle {
+            text-align: center;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .controls {
+            background: var(--card-background);
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group:last-child {
+            margin-bottom: 0;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--secondary-color);
+        }
+        
+        select, input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background-color: #357abd;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background-color: var(--text-secondary);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .stats {
+            background: var(--card-background);
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .stat-label {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .stat-value {
+            color: var(--primary-color);
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .entries {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .entry {
+            background: var(--card-background);
+            border-radius: 8px;
+            padding: 25px;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .entry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+        
+        .entry-header {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .entry-number {
+            font-size: 0.9em;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .field {
+            margin-bottom: 20px;
+        }
+        
+        .field:last-child {
+            margin-bottom: 0;
+        }
+        
+        .field-label {
+            font-weight: 700;
+            color: var(--secondary-color);
+            margin-bottom: 8px;
+            font-size: 0.95em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .field-content {
+            background: var(--background-color);
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid var(--primary-color);
+        }
+        
+        .field-content.raw {
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 0.9em;
+            background: #f8f9fa;
+            border-left-color: var(--text-secondary);
+        }
+        
+        .field-content.rendered {
+            line-height: 1.8;
+        }
+        
+        /* Markdown styles */
+        .field-content.rendered h1,
+        .field-content.rendered h2,
+        .field-content.rendered h3,
+        .field-content.rendered h4,
+        .field-content.rendered h5,
+        .field-content.rendered h6 {
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+            color: var(--secondary-color);
+        }
+        
+        .field-content.rendered h1 { font-size: 2em; border-bottom: 2px solid var(--border-color); }
+        .field-content.rendered h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-color); }
+        .field-content.rendered h3 { font-size: 1.25em; }
+        
+        .field-content.rendered p {
+            margin-bottom: 1em;
+        }
+        
+        .field-content.rendered ul,
+        .field-content.rendered ol {
+            margin-left: 2em;
+            margin-bottom: 1em;
+        }
+        
+        .field-content.rendered li {
+            margin-bottom: 0.5em;
+        }
+        
+        .field-content.rendered code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #e83e8c;
+        }
+        
+        .field-content.rendered pre {
+            background: #282c34;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin-bottom: 1em;
+        }
+        
+        .field-content.rendered pre code {
+            background: none;
+            padding: 0;
+            color: #abb2bf;
+        }
+        
+        .field-content.rendered blockquote {
+            border-left: 4px solid var(--primary-color);
+            padding-left: 1em;
+            margin-left: 0;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+        
+        .field-content.rendered table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 1em;
+        }
+        
+        .field-content.rendered th,
+        .field-content.rendered td {
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            text-align: left;
+        }
+        
+        .field-content.rendered th {
+            background: var(--background-color);
+            font-weight: 600;
+        }
+        
+        .field-content.rendered a {
+            color: var(--primary-color);
+            text-decoration: none;
+        }
+        
+        .field-content.rendered a:hover {
+            text-decoration: underline;
+        }
+        
+        /* KaTeX styles */
+        .katex-display {
+            margin: 1em 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 1.2em;
+        }
+        
+        .error {
+            background: #fee;
+            color: var(--danger-color);
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid var(--danger-color);
+            margin-bottom: 20px;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--card-background);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+        }
+        
+        .pagination button {
+            margin: 0;
+        }
+        
+        .pagination span {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+        
+        .filter-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .toggle-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .toggle-btn {
+            padding: 8px 16px;
+            background: var(--background-color);
+            color: var(--text-color);
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        
+        .toggle-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+            
+            .stats {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .filter-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>📊 JSONL Viewer</h1>
+            <p class="subtitle">Markdown & LaTeX Renderer</p>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <label for="fileSelect">📁 Select JSONL File:</label>
+                <select id="fileSelect">
+                    <option value="">Loading files...</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>🔧 Render Options:</label>
+                <div class="toggle-group">
+                    <button class="toggle-btn active" id="renderLatex">Render LaTeX</button>
+                </div>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="control-group">
+                    <label for="searchInput">🔍 Search:</label>
+                    <input type="text" id="searchInput" placeholder="Search in content...">
+                </div>
+                
+                <div class="control-group">
+                    <label for="perPage">📄 Items per page:</label>
+                    <input type="number" id="perPage" value="10" min="1" max="100">
+                </div>
+            </div>
+            
+            <div class="control-group" style="margin-top: 15px;">
+                <button id="loadBtn">🚀 Load File</button>
+                <button id="refreshBtn">🔄 Refresh File List</button>
+            </div>
+        </div>
+        
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-item">
+                <span class="stat-label">Total Entries:</span>
+                <span class="stat-value" id="totalEntries">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Showing:</span>
+                <span class="stat-value" id="showingEntries">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Current File:</span>
+                <span class="stat-value" id="currentFile">None</span>
+            </div>
+        </div>
+        
+        <div id="content">
+            <div class="loading">Select a file to begin</div>
+        </div>
+        
+        <div class="pagination" id="pagination" style="display: none;">
+            <button id="prevBtn">← Previous</button>
+            <span id="pageInfo">Page 1</span>
+            <button id="nextBtn">Next →</button>
+        </div>
+    </div>
+    
+    <script>
+        // Configuration
+        const config = {
+            renderLatex: true,
+            currentPage: 1,
+            perPage: 10,
+            searchQuery: ''
+        };
+        
+        let allEntries = [];
+        let filteredEntries = [];
+        
+        // Initialize marked.js with options
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, { language: lang }).value;
+                    } catch (err) {}
+                }
+                return hljs.highlightAuto(code).value;
+            }
+        });
+        
+        // DOM elements
+        const fileSelect = document.getElementById('fileSelect');
+        const loadBtn = document.getElementById('loadBtn');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const content = document.getElementById('content');
+        const renderLatexBtn = document.getElementById('renderLatex');
+        const searchInput = document.getElementById('searchInput');
+        const perPageInput = document.getElementById('perPage');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageInfo = document.getElementById('pageInfo');
+        const pagination = document.getElementById('pagination');
+        const stats = document.getElementById('stats');
+        
+        // Event listeners
+        loadBtn.addEventListener('click', loadFile);
+        refreshBtn.addEventListener('click', loadFileList);
+        renderLatexBtn.addEventListener('click', () => toggleOption('renderLatex'));
+        searchInput.addEventListener('input', handleSearch);
+        perPageInput.addEventListener('change', handlePerPageChange);
+        prevBtn.addEventListener('click', () => changePage(-1));
+        nextBtn.addEventListener('click', () => changePage(1));
+        
+        // Toggle rendering options
+        function toggleOption(option) {
+            config[option] = !config[option];
+            const btn = document.getElementById(option);
+            btn.classList.toggle('active');
+            
+            if (allEntries.length > 0) {
+                renderEntries();
+            }
+        }
+        
+        // Load file list
+        async function loadFileList() {
+            try {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = '⏳ Loading...';
+                
+                const response = await fetch('/api/list-files');
+                if (!response.ok) throw new Error('Failed to load file list');
+                
+                const files = await response.json();
+                
+                fileSelect.innerHTML = files.length > 0
+                    ? '<option value="">-- Select a file --</option>' + 
+                      files.map(f => `<option value="${f}">${f}</option>`).join('')
+                    : '<option value="">No JSONL files found</option>';
+                
+                refreshBtn.textContent = '🔄 Refresh File List';
+            } catch (error) {
+                console.error('Error loading file list:', error);
+                fileSelect.innerHTML = '<option value="">Error loading files</option>';
+                showError('Failed to load file list: ' + error.message);
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        }
+        
+        // Load selected file
+        async function loadFile() {
+            const filename = fileSelect.value;
+            if (!filename) {
+                showError('Please select a file');
+                return;
+            }
+            
+            try {
+                loadBtn.disabled = true;
+                loadBtn.textContent = '⏳ Loading...';
+                content.innerHTML = '<div class="loading">Loading file...</div>';
+                
+                const response = await fetch(`/api/load-file?file=${encodeURIComponent(filename)}`);
+                if (!response.ok) throw new Error('Failed to load file');
+                
+                const text = await response.text();
+                parseJSONL(text);
+                
+                document.getElementById('currentFile').textContent = filename.split('/').pop();
+                stats.style.display = 'flex';
+                
+                loadBtn.textContent = '🚀 Load File';
+            } catch (error) {
+                console.error('Error loading file:', error);
+                showError('Failed to load file: ' + error.message);
+            } finally {
+                loadBtn.disabled = false;
+            }
+        }
+        
+        // Parse JSONL content
+        function parseJSONL(text) {
+            try {
+                allEntries = text.trim().split('\n')
+                    .filter(line => line.trim())
+                    .map((line, index) => {
+                        try {
+                            return { index: index + 1, data: JSON.parse(line) };
+                        } catch (e) {
+                            console.error(`Error parsing line ${index + 1}:`, e);
+                            return null;
+                        }
+                    })
+                    .filter(entry => entry !== null);
+                
+                config.currentPage = 1;
+                applyFilters();
+                
+            } catch (error) {
+                console.error('Error parsing JSONL:', error);
+                showError('Failed to parse JSONL: ' + error.message);
+            }
+        }
+        
+        // Apply search and filters
+        function applyFilters() {
+            if (config.searchQuery) {
+                const query = config.searchQuery.toLowerCase();
+                filteredEntries = allEntries.filter(entry => 
+                    JSON.stringify(entry.data).toLowerCase().includes(query)
+                );
+            } else {
+                filteredEntries = allEntries;
+            }
+            
+            document.getElementById('totalEntries').textContent = allEntries.length;
+            renderEntries();
+        }
+        
+        // Handle search
+        function handleSearch() {
+            config.searchQuery = searchInput.value;
+            config.currentPage = 1;
+            applyFilters();
+        }
+        
+        // Handle per page change
+        function handlePerPageChange() {
+            config.perPage = parseInt(perPageInput.value) || 10;
+            config.currentPage = 1;
+            renderEntries();
+        }
+        
+        // Change page
+        function changePage(delta) {
+            const totalPages = Math.ceil(filteredEntries.length / config.perPage);
+            config.currentPage = Math.max(1, Math.min(totalPages, config.currentPage + delta));
+            renderEntries();
+        }
+        
+        // Render entries
+        function renderEntries() {
+            if (filteredEntries.length === 0) {
+                content.innerHTML = '<div class="loading">No entries found</div>';
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            const start = (config.currentPage - 1) * config.perPage;
+            const end = start + config.perPage;
+            const pageEntries = filteredEntries.slice(start, end);
+            const totalPages = Math.ceil(filteredEntries.length / config.perPage);
+            
+            content.innerHTML = '<div class="entries">' + 
+                pageEntries.map(renderEntry).join('') + 
+                '</div>';
+            
+            // Update pagination
+            pageInfo.textContent = `Page ${config.currentPage} of ${totalPages}`;
+            prevBtn.disabled = config.currentPage === 1;
+            nextBtn.disabled = config.currentPage === totalPages;
+            pagination.style.display = 'flex';
+            
+            document.getElementById('showingEntries').textContent = 
+                `${start + 1}-${Math.min(end, filteredEntries.length)} of ${filteredEntries.length}`;
+            
+            // Render LaTeX if enabled
+            if (config.renderLatex) {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\[', right: '\\]', display: true},
+                        {left: '\\(', right: '\\)', display: false},
+                        {left: '\\begin{equation}', right: '\\end{equation}', display: true},
+                        {left: '\\begin{align}', right: '\\end{align}', display: true},
+                        {left: '\\begin{align*}', right: '\\end{align*}', display: true},
+                        {left: '\\begin{alignat}', right: '\\end{alignat}', display: true},
+                        {left: '\\begin{gather}', right: '\\end{gather}', display: true},
+                        {left: '\\begin{gather*}', right: '\\end{gather*}', display: true},
+                        {left: '\\begin{CD}', right: '\\end{CD}', display: true}
+                    ],
+                    throwOnError: false,
+                    trust: true
+                });
+            }
+        }
+        
+        // Render single entry
+        function renderEntry(entry) {
+            const fields = Object.entries(entry.data).map(([key, value]) => {
+                const content = renderField(value);
+                return `
+                    <div class="field">
+                        <div class="field-label">${escapeHtml(key)}</div>
+                        ${content}
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="entry">
+                    <div class="entry-header">
+                        <div class="entry-number">Entry #${entry.index}</div>
+                    </div>
+                    ${fields}
+                </div>
+            `;
+        }
+        
+        // Render field content
+        function renderField(value) {
+            const strValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+            
+            // Always show raw text with proper formatting
+            const rendered = escapeHtml(strValue).replace(/\n/g, '<br>');
+            return `<div class="field-content raw">${rendered}</div>`;
+        }
+        
+        // Show error message
+        function showError(message) {
+            content.innerHTML = `<div class="error"><strong>Error:</strong> ${escapeHtml(message)}</div>`;
+            stats.style.display = 'none';
+            pagination.style.display = 'none';
+        }
+        
+        // Escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initialize
+        loadFileList();
+    </script>
+</body>
+</html>
