@@ -178,6 +178,8 @@
             padding: 25px;
             box-shadow: var(--shadow);
             transition: transform 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+            max-width: 100%;
         }
         
         .entry:hover {
@@ -224,19 +226,29 @@
             padding: 15px;
             border-radius: 6px;
             border-left: 4px solid var(--primary-color);
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            max-width: 100%;
         }
         
         .field-content.raw {
             font-family: 'Courier New', monospace;
             white-space: pre-wrap;
             word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
             font-size: 0.9em;
             background: #f8f9fa;
             border-left-color: var(--text-secondary);
+            overflow-x: auto;
         }
         
         .field-content.rendered {
             line-height: 1.8;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
         
         /* Markdown styles */
@@ -276,6 +288,9 @@
             font-family: 'Courier New', monospace;
             font-size: 0.9em;
             color: #e83e8c;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
         
         .field-content.rendered pre {
@@ -284,6 +299,9 @@
             border-radius: 6px;
             overflow-x: auto;
             margin-bottom: 1em;
+            max-width: 100%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
         }
         
         .field-content.rendered pre code {
