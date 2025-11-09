@@ -1,7 +1,8 @@
 
 import torch
-from transformers import PreTrainedTokenizerBase
+from transformers import PreTrainedTokenizerBase, PreTrainedModel
 
+# uv run pytest -k test_tokenize_prompt_and_output
 def tokenize_prompt_and_output(
     prompt_strs: list[str],
     output_strs: list[str],
@@ -98,6 +99,7 @@ def tokenize_prompt_and_output(
         "response_mask": torch.tensor(response_mask_list, dtype=torch.long),
     }
 
+# uv run pytest -k test_compute_entropy
 def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
     """Get the entropy over the vocabulary dimension.
 
@@ -112,3 +114,42 @@ def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
     probs = logits.softmax(dim=-1) # (B, T, V)
     entropy = logits.logsumexp(dim=-1) - (probs * logits).sum(dim=-1) # (B, T)
     return entropy
+
+# uv run pytest -k test_get_response_log_probs
+def get_response_log_probs(
+    model: PreTrainedModel,
+    input_ids: torch.Tensor,
+    labels: torch.Tensor,
+    return_token_entropy: bool = False,
+) -> dict[str, torch.Tensor]:
+    """Get the conditional log-probs of the response given the prompt, and optionally the entropy of the next token predictions.
+
+    Args:
+        model: PreTrainedModel, HuggingFace model used for scoring, 
+            placed on the correct device and in inference mode if gradients should not be computed.
+        input_ids: torch.Tensor of shape (batch_size, sequence_length):
+            concatenated prompt + response tokens as produced by your tokenization method.
+        labels: torch.Tensor of shape (batch_size, sequence_length):
+            labels as produced by your tokenization method.
+        return_token_entropy: bool, whether to return the entropy of the
+            next token predictions.
+
+    Returns:
+        dict[str, torch.Tensor]:
+            "log_probs": torch.Tensor of shape (batch_size, sequence_length):
+                the conditional log-probs of the response given the prompt.
+                Note that we have not masked out the token indices corresponding
+                to the prompt or padding; that is done in the train loop.
+            "token_entropy": Optional[torch.Tensor] of shape (batch_size, sequence_length):
+                the entropy of the next token predictions. As with the log-probs,
+                we have not masked out the token indices corresponding to the prompt
+                or padding; that is done in the train loop.
+    """
+    logits:torch.Tensor = model(input_ids).logits  # (B, T, V)
+    log_probs = logits.log_softmax(dim=-1).gather(
+        dim=-1, index=labels.unsqueeze(-1)
+    ).squeeze(-1)  # (B, T)
+    output = {"log_probs": log_probs}
+    if return_token_entropy:
+        output["token_entropy"] = compute_entropy(logits)  # (B, T)
+    return output

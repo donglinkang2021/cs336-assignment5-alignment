@@ -2,6 +2,7 @@
 
 ## [0.0.3] - 2025.11.09
 
+- pass `uv run pytest -k test_get_response_log_probs` in 8.10s
 - pass `uv run pytest -k test_compute_entropy` in 0.17s
 - pass `uv run pytest -k test_tokenize_prompt_and_output` in 0.52s
 
