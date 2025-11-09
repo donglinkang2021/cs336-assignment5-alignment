@@ -2,6 +2,7 @@
 
 ## [0.0.3] - 2025.11.09
 
+- 参考之前的 [here](https://github.com/donglinkang2021/minimal-openrs/blob/main/trainer/grpo_trainer.py#L1085-L1091) 重新实现了一下 generate_and_score 的过程，主要写在了 log_generations 里面；
 - pass `uv run pytest -k test_sft_microbatch_train_step` in 1.45s
 - pass `uv run pytest -k test_masked_normalize` in 1.50s
 - pass `uv run pytest -k test_get_response_log_probs` in 8.10s

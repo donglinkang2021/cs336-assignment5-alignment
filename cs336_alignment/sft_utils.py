@@ -1,6 +1,7 @@
-
+import re
 import torch
-from transformers import PreTrainedTokenizerBase, PreTrainedModel
+from transformers import PreTrainedTokenizerBase, PreTrainedModel, GenerationConfig
+from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 
 # uv run pytest -k test_tokenize_prompt_and_output
 def tokenize_prompt_and_output(
@@ -208,3 +209,179 @@ def sft_microbatch_train_step(
     loss = - masked_normalize(policy_log_probs, response_mask, normalize_constant=normalize_constant).mean() / gradient_accumulation_steps
     loss.backward()
     return loss.detach(), {}
+
+def get_completion_mask(completion_ids: torch.Tensor, eos_token_id: int) -> torch.Tensor:
+    """Get a mask for the completion tokens up to and including the first EOS token."""
+    device = completion_ids.device
+    is_eos = completion_ids == eos_token_id  # (batch_size, completion_length)
+    # Find first EOS position for each sequence, default to sequence length if no EOS
+    eos_positions = is_eos.int().argmax(dim=1)  # (batch_size,)
+    # If no EOS token exists, argmax returns 0, so we need to check
+    has_eos = is_eos.any(dim=1)  # (batch_size,)
+    eos_positions = torch.where(has_eos, eos_positions, completion_ids.size(1))
+    # Create mask: 1 for tokens up to and including first EOS, 0 after
+    completion_mask = torch.arange(completion_ids.size(1), device=device).unsqueeze(0) <= eos_positions.unsqueeze(1)
+    return completion_mask.int()
+
+def get_per_token_logits(
+    model: PreTrainedModel,
+    prompt_completion_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
+    logits_to_keep: int,
+    return_token_entropy: bool = True,
+) -> torch.Tensor:
+    # prompt_completion_ids: (B, prompt_length + completion_length)
+    logits = model(
+        prompt_completion_ids, attention_mask=attention_mask, logits_to_keep=logits_to_keep + 1
+    ).logits  # (B, L, V), L=completion_length + 1,
+    logits = logits[:, :-1, :] # (B, completion_length, V)
+    output = {"logits": logits}
+    if return_token_entropy:
+        output["token_entropy"] = compute_entropy(logits)  # (B, T)
+    return output
+
+# log_generations
+def log_generations(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    prompts: list[str],
+    ground_truths: list[str],
+    reward_fn: callable,
+    generation_kwargs: dict | None = None,
+    max_prompts: int | None = None,
+) -> dict[str, any]:
+    """Log generations from the model on given prompts.
+    
+    Args:
+        model: PreTrainedModel, the model to generate from.
+        tokenizer: PreTrainedTokenizer, the tokenizer to use.
+        prompts: list[str], the prompts to generate from.
+        ground_truths: list[str], the ground truth answers.
+        reward_fn: callable, a function that takes (response, ground_truth) and
+            returns a dict with keys "reward", "format_reward", "answer_reward".
+    
+    Returns:
+        dict[str, any]: A dictionary containing logging information with keys:
+            - "examples": list of dicts, each containing:
+                - "prompt": str
+                - "response": str
+                - "ground_truth": str
+                - "reward": float
+                - "format_reward": float
+                - "answer_reward": float
+                - "avg_token_entropy": float
+                - "response_length": int
+            - "avg_response_length/total": float
+            - "avg_response_length/correct": float
+            - "avg_response_length/incorrect": float
+            - "avg_token_entropy": float
+            - "avg_reward": float
+            - "avg_format_reward": float
+            - "avg_answer_reward": float
+    """
+    device = model.device
+    if generation_kwargs is None:
+        generation_kwargs = {
+            'max_new_tokens': 1024,
+            'do_sample': True,
+            "pad_token_id": tokenizer.pad_token_id,
+            "bos_token_id": tokenizer.bos_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+            'temperature': 1.0,
+            'top_p': 1.0,
+        }
+    generation_config = GenerationConfig(**generation_kwargs)
+    
+    # Limit number of prompts if specified
+    if max_prompts is not None and max_prompts < len(prompts):
+        prompts = prompts[:max_prompts]
+        ground_truths = ground_truths[:max_prompts]
+    
+    # Set model to eval mode
+    model.eval()
+    
+    # Store results
+    examples = []
+    
+    with torch.no_grad():
+
+        # 1. prompts -> tokenizer -> prompt_ids, prompt_mask
+        # Tokenize all prompts in batch
+        prompt_inputs = tokenizer(
+            prompts, return_tensors="pt",
+            padding=True, padding_side="left",
+            add_special_tokens=True,
+        )
+        prompt_ids = prompt_inputs["input_ids"].to(device)
+        prompt_mask = prompt_inputs["attention_mask"].to(device)
+        
+        # 2. prompt_ids, prompt_mask -> model.generate -> prompt_completion_ids
+        # Generate responses in batch
+        prompt_completion_ids = model.generate(
+            prompt_ids, attention_mask=prompt_mask,
+            generation_config = generation_config,
+        )
+        prompt_length = prompt_ids.size(1)
+        prompt_ids = prompt_completion_ids[:, :prompt_length]
+        completion_ids = prompt_completion_ids[:, prompt_length:]
+
+        # 3. completion_ids -> completion_mask
+        completion_mask = get_completion_mask(
+            completion_ids, tokenizer.eos_token_id
+        )  # (B, completion_length)
+
+        # 4. prompt_ids -> prompt_text, completion_ids -> completion_text
+        prompts_text = tokenizer.batch_decode(
+            prompt_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False
+        )
+        prompts_text = [
+            re.sub(rf"^({re.escape(tokenizer.pad_token)})+", "", text) for text in prompts_text
+        ]
+        completions_text = tokenizer.batch_decode(
+            completion_ids, skip_special_tokens=True
+        )
+
+        # 5. prompt_completion_ids, attention_mask -> model -> logits -> entropy
+        attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)
+        logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
+        output = get_per_token_logits(model, prompt_completion_ids, attention_mask, logits_to_keep, return_token_entropy=True)
+        entropy = output["token_entropy"]  # (B, completion_length)
+
+        # 6. get rewards and log everything
+        for i, (prompt, completion, ground_truth) in enumerate(zip(prompts_text, completions_text, ground_truths)):
+            # Apply completion mask to get valid tokens only
+            valid_length = completion_mask[i].sum().item()
+            response_entropy = entropy[i, :valid_length]
+            avg_entropy = response_entropy.mean().item()
+
+            # Compute reward
+            reward_info = reward_fn(completion, ground_truth)
+
+            # Store example info
+            example_info = {
+                "prompt": prompt,
+                "response": completion,
+                "ground_truth": ground_truth,
+                "reward": reward_info["reward"],
+                "format_reward": reward_info["format_reward"],
+                "answer_reward": reward_info["answer_reward"],
+                "avg_token_entropy": avg_entropy,
+                "response_length": valid_length,
+            }
+            examples.append(example_info)
+
+    def _mean(lst):
+        return sum(lst) / len(lst) if lst else 0.0
+
+    return {
+        "examples": examples,
+        "avg_token_entropy": _mean([ex["avg_token_entropy"] for ex in examples]),
+        "avg_reward": _mean([ex["reward"] for ex in examples]),
+        "avg_format_reward": _mean([ex["format_reward"] for ex in examples]),
+        "avg_answer_reward": _mean([ex["answer_reward"] for ex in examples]),
+        "avg_response_length/total": _mean([ex["response_length"] for ex in examples]),
+        "avg_response_length/correct": _mean(
+            [ex["response_length"] for ex in examples if ex["answer_reward"] > 0]),
+        "avg_response_length/incorrect": _mean(
+            [ex["response_length"] for ex in examples if ex["answer_reward"] <= 0]),
+    }
