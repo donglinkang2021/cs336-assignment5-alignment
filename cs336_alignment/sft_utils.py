@@ -178,3 +178,33 @@ def masked_normalize(
             (mask=0) don't contribute to the sum.
     """
     return (tensor * mask).sum(dim=dim) / normalize_constant
+
+# uv run pytest -k test_sft_microbatch_train_step
+def sft_microbatch_train_step(
+    policy_log_probs: torch.Tensor,
+    response_mask: torch.Tensor,
+    gradient_accumulation_steps: int,
+    normalize_constant: int | None = 1.0,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Compute the policy gradient loss and backprop its gradients for a microbatch.
+    
+    Args:
+        policy_log_probs: A tensor of shape `(batch_size, sequence_length)` containing
+            the per-token log-probabilities from the SFT policy being trained.
+        response_mask: A tensor of shape `(batch_size, sequence_length)` with `1` for
+            response tokens and `0` for prompt/padding tokens. This mask is used to
+            select the tokens for which the loss should be computed.
+        gradient_accumulation_steps: The number of microbatches to process before
+            performing an optimizer step. The loss is divided by this number to
+            ensure that the accumulated gradients are correctly scaled.
+        normalize_constant: An optional constant to divide the sum of log-probabilities by.
+            Defaults to 1.0, which means no extra normalization.
+    Returns:
+        A tuple containing:
+            - loss: A scalar tensor representing the microbatch loss, scaled for
+              gradient accumulation. This value is suitable for logging.
+            - metadata: A dictionary containing metadata and statistics from the loss computation, which can also be used for logging.
+    """
+    loss = - masked_normalize(policy_log_probs, response_mask, normalize_constant=normalize_constant).mean() / gradient_accumulation_steps
+    loss.backward()
+    return loss.detach(), {}
