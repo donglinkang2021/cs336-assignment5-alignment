@@ -153,3 +153,28 @@ def get_response_log_probs(
     if return_token_entropy:
         output["token_entropy"] = compute_entropy(logits)  # (B, T)
     return output
+
+# uv run pytest -k test_masked_normalize
+def masked_normalize(
+    tensor: torch.Tensor,
+    mask: torch.Tensor,
+    dim: int = -1,
+    normalize_constant: float = 1.0,
+) -> torch.Tensor:
+    """Sum over a dimension and normalize by a constant,
+    considering only the elements with mask value 1.
+
+    Args:
+        tensor: torch.Tensor, the tensor to sum and normalize.
+        mask: torch.Tensor, the mask. We only consider elements
+            with mask value 1.
+        dim: int | None, the dimension to sum along before
+            normalization. If None, sum over all dimensions.
+        normalize_constant: float, the constant to divide by
+            for normalization.
+
+    Returns:
+        torch.Tensor, the normalized sum, where masked elements
+            (mask=0) don't contribute to the sum.
+    """
+    return (tensor * mask).sum(dim=dim) / normalize_constant
