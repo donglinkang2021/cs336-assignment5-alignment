@@ -1,0 +1,31 @@
+# vLLM Server Configuration
+# Model settings
+model: "Qwen/Qwen2.5-Math-1.5B"
+revision: null
+
+# Parallelization settings
+tensor_parallel_size: 1
+data_parallel_size: 1
+
+# Server settings
+host: "0.0.0.0"
+port: 8000
+
+# GPU and Memory settings
+gpu_memory_utilization: 0.9
+dtype: "float16" # "auto", "bfloat16", "float"
+max_model_len: null
+kv_cache_dtype: "auto"
+
+# Performance settings
+enable_prefix_caching: null
+enforce_eager: false
+
+# Model implementation
+vllm_model_impl: "vllm"
+
+# Security settings
+trust_remote_code: false
+
+# Logging
+log_level: "info"
