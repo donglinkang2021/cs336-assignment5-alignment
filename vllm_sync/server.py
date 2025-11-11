@@ -96,5 +96,3 @@ def main(script_args: ScriptArguments):
 
 if __name__ == "__main__":
     main()
-
-# HF_HUB_OFFLINE=1 CUDA_VISIBLE_DEVICES=1 python -m vllm_sync.server model=Qwen/Qwen2.5-Math-1.5B
