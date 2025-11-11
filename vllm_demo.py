@@ -4,9 +4,16 @@ from vllm_sync import VLLMClient
 def generate_text(client:VLLMClient, tokenizer: AutoTokenizer):
     """Generate text using the VLLM client."""
     # Generate completions
+    generation_kwargs = dict(
+        temperature=1.0,
+        top_p=1.0,
+        max_tokens=32,
+        # stop=["</answer>"],
+        # include_stop_str_in_output=True,
+    )
     output = client.generate(
         ["Hello, AI!", "Tell me a joke"], 
-        n=4, max_tokens=32, temperature=0.6, top_p=0.95
+        n=4, generation_kwargs = generation_kwargs
     )
     # print("Responses:", responses)  # noqa
     print("====================== Generated Text ====================")
