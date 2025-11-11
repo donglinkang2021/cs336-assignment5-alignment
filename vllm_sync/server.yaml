@@ -13,7 +13,7 @@ port: 8000
 
 # GPU and Memory settings
 gpu_memory_utilization: 0.9
-dtype: "float16" # "auto", "bfloat16", "float"
+dtype: "bfloat16" # "auto", "bfloat16", "float"
 max_model_len: null
 kv_cache_dtype: "auto"
 
@@ -29,3 +29,7 @@ trust_remote_code: false
 
 # Logging
 log_level: "info"
+
+hydra:
+ run:
+   dir: ckpt/outputs
