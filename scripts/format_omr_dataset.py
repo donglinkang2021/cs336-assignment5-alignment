@@ -56,7 +56,7 @@ print(f"Validation samples: {len(formatted_dataset['validation'])}")
 
 # Print a sample to verify formatting
 print("\nSample formatted solution (first 500 chars):")
-print(formatted_dataset['train'][0]['generated_solution'][:500])
+print(formatted_dataset['train'][0]['generated_solution'])
 
 # Optional: Upload to Hugging Face
 # formatted_dataset.push_to_hub("your-username/OMR12k-formated")
