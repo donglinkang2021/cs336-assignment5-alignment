@@ -2,8 +2,10 @@
 
 事情有点多，先写一下来捋清自己的思路
 
-
-
+- 为了实现长上下文扩展这里将 Qwen2.5-Math-1.5B 的 config.json
+    - rope_theta 10000 -> 160000
+    - max_position_embeddings 4096 -> 32768
+- 最后是采用trl的做法将vllm包装成server和client的形式来同步权重
 - 还是在实现 vllm 的实现上踩坑了，可能还是得用下 ray 来做分布式
     - 参考这个 [here](../myrepo/minimal-openrs/vllm_demo.py)，这个是使用 trl 的 trl.extras.vllm_client
     - 或者是参考 这个 [here](../myrepo/Zero1/docs/vllm_rlhf.md)，这个是OpenRLHF 的做法

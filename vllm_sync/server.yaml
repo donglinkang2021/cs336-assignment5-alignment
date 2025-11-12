@@ -32,4 +32,4 @@ log_level: "info"
 
 hydra:
  run:
-   dir: ckpt/outputs
+   dir: ckpt/vllm_server/outputs

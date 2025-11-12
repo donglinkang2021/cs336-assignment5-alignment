@@ -1,0 +1,54 @@
+_target_: sft_config.ScriptArguments
+
+model:
+  _target_: sft_config.ModelConfig
+  model_name_or_path: models/Qwen2.5-Math-1.5B
+  dtype: bfloat16
+  gradient_checkpointing: true
+
+data:
+  _target_: sft_config.DataConfig
+  train_data_path: data/OMR12k-formated/train.jsonl
+  val_data_path: data/OMR12k-formated/validation.jsonl
+  num_train_examples: null
+  prompt_name: r1_zero
+
+training:
+  _target_: sft_config.TrainingConfig
+  output_dir: ckpt/sft_omr12k
+  num_epochs: 1
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 5e-6
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  warmup_ratio: 0.1
+  lr_scheduler_type: cosine
+  seed: 42
+
+evaluation:
+  _target_: sft_config.EvaluationConfig
+  eval_steps: 50
+  save_steps: 0
+  max_eval_examples: 100
+  use_vllm_eval: true
+  generation_temperature: 1.0
+  generation_top_p: 1.0
+  generation_max_tokens: 32768
+
+logging:
+  _target_: sft_config.LoggingConfig
+  use_wandb: false
+  wandb_project: cs336-align
+  wandb_run_name: null
+
+hydra:
+  run:
+    dir: ${training.output_dir}/runs/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  sweep:
+    dir: ${training.output_dir}/multiruns/${now:%Y-%m-%d}_${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  job_logging:
+    handlers:
+      file:
+        filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log

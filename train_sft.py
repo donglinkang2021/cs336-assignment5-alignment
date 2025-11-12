@@ -1,4 +1,4 @@
-import debugpy; debugpy.connect(('0.0.0.0', 5678))
+# import debugpy; debugpy.connect(('0.0.0.0', 5678))
 """
 Train Qwen 2.5 Math 1.5B using Supervised Fine-Tuning (SFT) on OMR12k dataset.
 
@@ -11,49 +11,37 @@ It includes:
 5. Saving checkpoints
 
 Usage:
-    python scripts/train_sft.py \
-        --model-name-or-path models/Qwen2.5-Math-1.5B \
-        --train-data-path data/OMR12k/train.jsonl \
-        --val-data-path data/OMR12k/validation.jsonl \
-        --output-dir outputs/sft_omr12k \
-        --num-train-examples 12000 \
-        --batch-size 4 \
-        --gradient-accumulation-steps 4 \
-        --learning-rate 5e-6 \
-        --num-epochs 3 \
-        --eval-steps 500 \
-        --save-steps 1000 \
-        --max-eval-examples 100 \
-        --seed 42 \
-        --use-wandb
+    python train_sft.py
+    
+    # Override config values from command line
+    python train_sft.py training.num_epochs=5 training.batch_size=8
+    
+    # Use wandb
+    python train_sft.py logging.use_wandb=true logging.wandb_run_name=my_experiment
 """
 
-import os
-import argparse
-import json
 import logging
 import random
-import sys
 from pathlib import Path
 from typing import Dict, List
 
+import hydra
 import torch
-import torch.nn.functional as F
 from datasets import load_dataset
+from omegaconf import DictConfig, OmegaConf
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
-from vllm import SamplingParams
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, get_scheduler
 from vllm_sync import VLLMClient
 
 from cs336_alignment.sft_utils import (
     tokenize_prompt_and_output,
     get_response_log_probs,
     sft_microbatch_train_step,
-    log_generations,
 )
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from sft_config import ScriptArguments
 
 logger = logging.getLogger(__name__)
 
@@ -91,11 +79,10 @@ class SFTDataset(Dataset):
         return len(self.dataset)
     
     def __getitem__(self, idx):
-        return {
-            "prompt": self.prompt_template.format(question=self.dataset[idx].get("problem", "")),
-            "response": self.dataset[idx].get("generated_solution", ""),
-            "ground_truth": self.dataset[idx].get("expected_answer", ""),
-        }
+        prompt = self.prompt_template.format(question=self.dataset[idx].get("problem", ""))
+        response = self.dataset[idx].get("generated_solution", "")
+        ground_truth = self.dataset[idx].get("expected_answer", "")
+        return { "prompt": prompt, "response": response, "ground_truth": ground_truth}
 
 
 def collate_fn(batch: List[Dict], tokenizer):
@@ -168,22 +155,28 @@ def evaluate_model(
     return aggregate_metrics
 
 
-def train(args):
+def train(cfg: ScriptArguments):
     """Main training function."""
     
     # Set random seeds
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    random.seed(cfg.training.seed)
+    torch.manual_seed(cfg.training.seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(args.seed)
+        torch.cuda.manual_seed_all(cfg.training.seed)
     
     # Setup wandb if enabled
-    if args.use_wandb:
+    if cfg.logging.use_wandb:
         import wandb
+        
+        # Set default wandb run name if not provided
+        wandb_run_name = cfg.logging.wandb_run_name
+        if wandb_run_name is None:
+            wandb_run_name = f"sft_{cfg.data.num_train_examples if cfg.data.num_train_examples else 'full'}"
+        
         wandb.init(
-            project=args.wandb_project,
-            name=args.wandb_run_name,
-            config=vars(args),
+            project=cfg.logging.wandb_project,
+            name=wandb_run_name,
+            config=OmegaConf.to_container(cfg, resolve=True),
         )
         
         # Setup wandb metrics
@@ -193,24 +186,24 @@ def train(args):
         wandb.define_metric("eval/*", step_metric="eval_step")
     
     # Load tokenizer
-    logger.info(f"Loading tokenizer from {args.model_name_or_path}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
+    logger.info(f"Loading tokenizer from {cfg.model.model_name_or_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model.model_name_or_path)
     
     # Set pad token if not set
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
     # Load model on GPU 0
-    logger.info(f"Loading model from {args.model_name_or_path} on cuda:0...")
+    logger.info(f"Loading model from {cfg.model.model_name_or_path} on cuda:0...")
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path,
-        dtype=args.dtype,
-        use_cache = not args.gradient_checkpointing,
+        cfg.model.model_name_or_path,
+        dtype=cfg.model.dtype,
+        use_cache = not cfg.model.gradient_checkpointing,
     ).to("cuda:0")
     model.train()
 
     # Enable gradient checkpointing if requested
-    if args.gradient_checkpointing:
+    if cfg.model.gradient_checkpointing:
         logger.info("Enabling gradient checkpointing to save memory...")
         model.gradient_checkpointing_enable()
     
@@ -220,16 +213,16 @@ def train(args):
     vllm_client.init_communicator()
     
     # Load prompt template
-    prompt_template = load_prompt_template("r1_zero")
+    prompt_template = load_prompt_template(cfg.data.prompt_name)
     
     # Load datasets
     train_dataset = SFTDataset(
-        args.train_data_path,
+        cfg.data.train_data_path,
         prompt_template,
-        num_examples=args.num_train_examples,
+        num_examples=cfg.data.num_train_examples,
     )
     val_dataset = SFTDataset(
-        args.val_data_path,
+        cfg.data.val_data_path,
         prompt_template,
         num_examples=None,  # Use all validation examples
     )
@@ -237,7 +230,7 @@ def train(args):
     # Create dataloader
     train_loader = DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=cfg.training.batch_size,
         shuffle=True,
         collate_fn=lambda batch: collate_fn(batch, tokenizer),
     )
@@ -245,17 +238,17 @@ def train(args):
     # Setup optimizer
     optimizer = AdamW(
         model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay,
+        lr=cfg.training.learning_rate,
+        weight_decay=cfg.training.weight_decay,
     )
     
     # Calculate total training steps
-    num_training_steps = len(train_loader) * args.num_epochs
-    num_warmup_steps = int(num_training_steps * args.warmup_ratio)
+    num_training_steps = len(train_loader) * cfg.training.num_epochs
+    num_warmup_steps = int(num_training_steps * cfg.training.warmup_ratio)
     
     # Setup learning rate scheduler
     lr_scheduler = get_scheduler(
-        name=args.lr_scheduler_type,
+        name=cfg.training.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=num_warmup_steps,
         num_training_steps=num_training_steps,
@@ -263,15 +256,15 @@ def train(args):
     
     # Setup sampling parameters for evaluation
     generation_kwargs = dict(
-        temperature=1.0,
-        top_p=1.0,
-        max_tokens=1024,
-        # stop=["</answer>"],
-        # include_stop_str_in_output=True,
+        temperature=cfg.evaluation.generation_temperature,
+        top_p=cfg.evaluation.generation_top_p,
+        max_tokens=cfg.evaluation.generation_max_tokens,
+        stop=["</answer>"],
+        include_stop_str_in_output=True,
     )
     
     # Create output directory
-    output_dir = Path(args.output_dir)
+    output_dir = Path(cfg.training.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Training loop
@@ -281,13 +274,13 @@ def train(args):
     
     logger.info("Starting training...")
     logger.info(f"  Num examples = {len(train_dataset)}")
-    logger.info(f"  Num epochs = {args.num_epochs}")
-    logger.info(f"  Batch size = {args.batch_size}")
-    logger.info(f"  Gradient accumulation steps = {args.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {num_training_steps // args.gradient_accumulation_steps}")
+    logger.info(f"  Num epochs = {cfg.training.num_epochs}")
+    logger.info(f"  Batch size = {cfg.training.batch_size}")
+    logger.info(f"  Gradient accumulation steps = {cfg.training.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {num_training_steps // cfg.training.gradient_accumulation_steps}")
     
-    for epoch in range(args.num_epochs):
-        logger.info(f"Epoch {epoch + 1}/{args.num_epochs}")
+    for epoch in range(cfg.training.num_epochs):
+        logger.info(f"Epoch {epoch + 1}/{cfg.training.num_epochs}")
         
         model.train()
         epoch_loss = 0.0
@@ -316,16 +309,16 @@ def train(args):
             loss, metadata = sft_microbatch_train_step(
                 policy_log_probs=policy_log_probs,
                 response_mask=response_mask,
-                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
                 normalize_constant=response_mask.sum(dim=1).float().mean().item(),
             )
             
             epoch_loss += loss.item()
             
             # Gradient accumulation
-            if (step + 1) % args.gradient_accumulation_steps == 0:
+            if (step + 1) % cfg.training.gradient_accumulation_steps == 0:
                 # Clip gradients
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.training.max_grad_norm)
                 
                 # Update weights
                 optimizer.step()
@@ -338,22 +331,22 @@ def train(args):
                 avg_entropy = (token_entropy * response_mask).sum() / response_mask.sum()
                 
                 metrics = {
-                    "train/loss": loss.item() * args.gradient_accumulation_steps,
+                    "train/loss": loss.item() * cfg.training.gradient_accumulation_steps,
                     "train/learning_rate": lr_scheduler.get_last_lr()[0],
                     "train/avg_token_entropy": avg_entropy.item(),
                     "train_step": global_step,
                 }
                 
-                if args.use_wandb:
+                if cfg.logging.use_wandb:
                     wandb.log(metrics)
                 
                 progress_bar.set_postfix({
-                    "loss": f"{loss.item() * args.gradient_accumulation_steps:.4f}",
+                    "loss": f"{loss.item() * cfg.training.gradient_accumulation_steps:.4f}",
                     "lr": f"{lr_scheduler.get_last_lr()[0]:.2e}",
                 })
                 
                 # Evaluation
-                if args.eval_steps > 0 and global_step % args.eval_steps == 0:
+                if cfg.evaluation.eval_steps > 0 and global_step % cfg.evaluation.eval_steps == 0:
                     logger.info(f"Running evaluation at step {global_step}...")
                     
                     # Load current policy weights into VLLMClient
@@ -362,7 +355,7 @@ def train(args):
                     # Evaluate using VLLMClient
                     eval_metrics = evaluate_model(
                         vllm_client, tokenizer, val_dataset, generation_kwargs, 
-                        args.max_eval_examples,
+                        cfg.evaluation.max_eval_examples,
                     )
                     
                     eval_step += 1
@@ -376,7 +369,7 @@ def train(args):
                         "eval_step": eval_step,
                     }
                     
-                    if args.use_wandb:
+                    if cfg.logging.use_wandb:
                         wandb.log(eval_log)
                     
                     logger.info(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
@@ -391,7 +384,7 @@ def train(args):
                         tokenizer.save_pretrained(best_model_dir)
 
                 # Save checkpoint
-                if args.save_steps > 0 and global_step % args.save_steps == 0:
+                if cfg.evaluation.save_steps > 0 and global_step % cfg.evaluation.save_steps == 0:
                     checkpoint_dir = output_dir / f"checkpoint-{global_step}"
                     logger.info(f"Saving checkpoint to {checkpoint_dir}")
                     model.save_pretrained(checkpoint_dir)
@@ -407,177 +400,29 @@ def train(args):
     model.save_pretrained(final_model_dir)
     tokenizer.save_pretrained(final_model_dir)
     
-    if args.use_wandb:
+    if cfg.logging.use_wandb:
         wandb.finish()
     
     logger.info(f"Training completed! Best accuracy: {best_accuracy:.4f}")
 
 
-def main():
+@hydra.main(version_base=None, config_path="conf", config_name="sft_config")
+def main(cfg: DictConfig) -> None:
+    """Main entry point with Hydra configuration."""
     logging.basicConfig(
         format="%(asctime)s - %(module)s - %(levelname)s - %(message)s",
         level=logging.INFO,
     )
     
-    parser = argparse.ArgumentParser(description="SFT training script")
+    # Convert DictConfig to ScriptArguments dataclass
+    script_args:ScriptArguments = hydra.utils.instantiate(cfg, _convert_="object")
     
-    # Model arguments
-    parser.add_argument(
-        "--model-name-or-path",
-        type=str,
-        default="models/Qwen2.5-Math-1.5B",
-        help="Path to pretrained model",
-    )
-    parser.add_argument(
-        "--dtype",
-        type=str,
-        default="bfloat16",
-        help="Data type for model weights (e.g., float16, bfloat16)",
-    )
+    # Log configuration
+    logger.info("Configuration:")
+    logger.info(OmegaConf.to_yaml(cfg))
     
-    # Data arguments
-    parser.add_argument(
-        "--train-data-path",
-        type=str,
-        default="data/OMR12k/train.jsonl",
-        help="Path to training data (jsonl format)",
-    )
-    parser.add_argument(
-        "--val-data-path",
-        type=str,
-        default="data/OMR12k/validation.jsonl",
-        help="Path to validation data (jsonl format)",
-    )
-    parser.add_argument(
-        "--num-train-examples",
-        type=int,
-        default=None,
-        help="Number of training examples to use (None = use all)",
-    )
-    
-    # Training arguments
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="outputs/sft_omr12k",
-        help="Directory to save model and checkpoints",
-    )
-    parser.add_argument(
-        "--num-epochs",
-        type=int,
-        default=3,
-        help="Number of training epochs",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=4,
-        help="Training batch size per device",
-    )
-    parser.add_argument(
-        "--gradient-accumulation-steps",
-        type=int,
-        default=4,
-        help="Number of gradient accumulation steps",
-    )
-    parser.add_argument(
-        "--learning-rate",
-        type=float,
-        default=5e-6,
-        help="Learning rate",
-    )
-    parser.add_argument(
-        "--weight-decay",
-        type=float,
-        default=0.01,
-        help="Weight decay",
-    )
-    parser.add_argument(
-        "--max-grad-norm",
-        type=float,
-        default=1.0,
-        help="Max gradient norm for clipping",
-    )
-    parser.add_argument(
-        "--warmup-ratio",
-        type=float,
-        default=0.1,
-        help="Warmup ratio",
-    )
-    parser.add_argument(
-        "--lr-scheduler-type",
-        type=str,
-        default="cosine",
-        help="Learning rate scheduler type",
-    )
-    
-    # Evaluation arguments
-    parser.add_argument(
-        "--eval-steps",
-        type=int,
-        default=500,
-        help="Run evaluation every N steps (0 = no evaluation)",
-    )
-    parser.add_argument(
-        "--save-steps",
-        type=int,
-        default=1000,
-        help="Save checkpoint every N steps (0 = no checkpoints)",
-    )
-    parser.add_argument(
-        "--max-eval-examples",
-        type=int,
-        default=100,
-        help="Maximum number of examples to use for evaluation",
-    )
-    parser.add_argument(
-        "--use-vllm-eval",
-        action="store_true",
-        help="Use vLLM for evaluation (requires 2 GPUs)",
-    )
-    
-    # Logging arguments
-    parser.add_argument(
-        "--use-wandb",
-        action="store_true",
-        help="Use wandb for logging",
-    )
-    parser.add_argument(
-        "--wandb-project",
-        type=str,
-        default="cs336-sft",
-        help="Wandb project name",
-    )
-    parser.add_argument(
-        "--wandb-run-name",
-        type=str,
-        default=None,
-        help="Wandb run name",
-    )
-    
-    # Other arguments
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Random seed",
-    )
-
-    parser.add_argument(
-        "--gradient-checkpointing",
-        action="store_true",
-        help="Enable gradient checkpointing to save memory (trades compute for memory)",
-    )
-    
-    args = parser.parse_args()
-    
-    # Set default wandb run name if not provided
-    if args.wandb_run_name is None:
-        args.wandb_run_name = f"sft_{args.num_train_examples if args.num_train_examples else 'full'}"
-    
-    logger.info("Running: %s", " ".join(sys.argv))
-    train(args)
-    logger.info("Finished running %s", sys.argv[0])
+    # Run training
+    train(script_args)
 
 
 if __name__ == "__main__":
