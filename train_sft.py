@@ -41,7 +41,7 @@ from cs336_alignment.sft_utils import (
 )
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 from cs336_alignment.optimizer import MemoryEfficientAdamW
-from sft_config import ScriptArguments
+from cs336_alignment.sft_config import ScriptArguments
 
 logger = logging.getLogger(__name__)
 

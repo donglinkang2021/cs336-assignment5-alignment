@@ -1,0 +1,328 @@
+"""
+Unified evaluation script for MATH dataset with selectable inference backend (vLLM or HF).
+
+This script:
+1. Loads MATH validation examples.
+2. Formats them using a specified prompt template.
+3. Generates outputs using either vLLM or Hugging Face Transformers.
+4. Evaluates using a reward function (e.g., Dr. GRPO's).
+5. Saves detailed and summary results to disk.
+6. Uses Hydra for configuration management.
+
+Usage:
+
+# Run with vLLM backend
+python eval/evaluate_math.py backend=vllm \
+    model.model_name_or_path=models/Qwen2.5-Math-1.5B \
+    dataset.data_path=data/Math/validation.jsonl
+
+# Run with Hugging Face backend
+python eval/evaluate_math.py backend=hf \
+    model.model_name_or_path=outputs/sft_omr12k/best_model \
+    dataset.data_path=data/OMR12k/validation.jsonl
+"""
+
+import re
+import json
+import logging
+import random
+import sys
+from pathlib import Path
+from statistics import mean
+from typing import Callable, Dict, List
+
+import hydra
+import torch
+from datasets import Dataset, load_dataset
+from omegaconf import OmegaConf
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from xopen import xopen
+
+from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from cs336_alignment.eval_config import ScriptArguments, DatasetConfig
+
+# Conditional import for vLLM
+try:
+    from vllm import LLM, SamplingParams
+    VLLM_AVAILABLE = True
+except ImportError:
+    VLLM_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+
+
+def load_prompt_template(prompt_name: str) -> str:
+    """Load a prompt template from the prompts directory."""
+    # Assuming the script is run from the root of the project
+    prompt_path = Path("cs336_alignment") / "prompts" / f"{prompt_name}.prompt"
+    with open(prompt_path) as f:
+        return f.read()
+
+
+def load_dataset_flexible(cfg: DatasetConfig) -> Dataset:
+    """
+    Load dataset from either local file or HuggingFace Hub based on config.
+    """
+    if cfg.type == "local":
+        if cfg.data_path is None:
+            raise ValueError("data_path must be provided when dataset.type='local'")
+        logger.info(f"Loading examples from local file: {cfg.data_path}...")
+        dataset = load_dataset('json', data_files=cfg.data_path, split='train')
+    elif cfg.type == "huggingface":
+        if cfg.dataset_name is None or cfg.dataset_split is None:
+            raise ValueError(
+                "dataset_name and dataset_split must be provided for huggingface dataset"
+            )
+        logger.info(f"Loading from HuggingFace: {cfg.dataset_name}, split={cfg.dataset_split}...")
+        dataset = load_dataset(cfg.dataset_name, split=cfg.dataset_split)
+    else:
+        raise ValueError(f"Invalid dataset type: {cfg.type}. Must be 'local' or 'huggingface'")
+    
+    logger.info(f"Loaded {len(dataset)} examples")
+    if cfg.get("num_samples"):
+        num_samples = min(cfg.num_samples, len(dataset))
+        logger.info(f"Sampling {num_samples} examples from the dataset.")
+        indices = random.sample(range(len(dataset)), num_samples)
+        dataset = dataset.select(indices)
+
+    return dataset
+
+
+def process_math_example(sample: Dict, prompt_template: str) -> Dict:
+    """
+    Process a single MATH example by formatting the prompt.
+    """
+    question = sample.get("problem", sample.get("question", ""))
+    answer = sample.get("solution", sample.get("expected_answer", sample.get("answer", "")))
+    
+    sample["prompt"] = prompt_template.format(question=question)
+    sample["ground_truth"] = answer
+    
+    return sample
+
+
+def evaluate_and_save_results(
+    prompts: List[str],
+    responses: List[str],
+    ground_truths: List[str],
+    reward_fn: Callable[[str, str], dict[str, float]],
+    output_dir: str,
+) -> None:
+    """
+    Evaluate responses, compute metrics, and serialize results to disk.
+    """
+    logger.info(f"Evaluating {len(responses)} responses...")
+    
+    all_metrics = []
+    results = []
+    
+    for prompt, response, ground_truth in tqdm(
+        zip(prompts, responses, ground_truths),
+        total=len(responses),
+        desc="Evaluating"
+    ):
+        metrics = reward_fn(response, ground_truth)
+        all_metrics.append(metrics)
+        
+        result = {
+            "prompt": prompt,
+            "ground_truth": ground_truth,
+            "response": response,
+            "metrics": metrics,
+        }
+        results.append(result)
+    
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    results_file = output_path / "results.jsonl"
+    logger.info(f"Saving detailed results to {results_file}...")
+    with xopen(results_file, "w") as f:
+        for result in results:
+            f.write(json.dumps(result) + "\n")
+    
+    aggregate_metrics = {key: mean([m[key] for m in all_metrics]) for key in sorted(all_metrics[0].keys())}
+    
+    total = len(all_metrics)
+    category_1 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 1.0)
+    category_2 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 0.0)
+    category_3 = sum(1 for m in all_metrics if m["format_reward"] == 0.0 and m["answer_reward"] == 0.0)
+    
+    summary = {
+        "total_examples": total,
+        "aggregate_metrics": aggregate_metrics,
+        "category_breakdown": {
+            "category_1_format1_answer1": {"count": category_1, "percentage": category_1 / total * 100 if total > 0 else 0},
+            "category_2_format1_answer0": {"count": category_2, "percentage": category_2 / total * 100 if total > 0 else 0},
+            "category_3_format0_answer0": {"count": category_3, "percentage": category_3 / total * 100 if total > 0 else 0},
+        }
+    }
+    
+    summary_file = output_path / "summary.json"
+    logger.info(f"Saving summary to {summary_file}...")
+    with xopen(summary_file, "w") as f:
+        f.write(json.dumps(summary, indent=2) + "\n")
+
+    logger.info("\n" + "=" * 80)
+    logger.info("Evaluation Summary")
+    logger.info("=" * 80)
+    for key, value in aggregate_metrics.items():
+        logger.info(f"  {key}: {value:.4f}")
+    logger.info("-" * 80)
+    logger.info("Category Breakdown:")
+    logger.info(f"  Correct (Format & Answer): {category_1} ({summary['category_breakdown']['category_1_format1_answer1']['percentage']:.2f}%)")
+    logger.info(f"  Correct Format, Wrong Answer: {category_2} ({summary['category_breakdown']['category_2_format1_answer0']['percentage']:.2f}%)")
+    logger.info(f"  Wrong Format: {category_3} ({summary['category_breakdown']['category_3_format0_answer0']['percentage']:.2f}%)")
+    logger.info("=" * 80)
+
+
+def run_vllm_evaluation(cfg: ScriptArguments, dataset: Dataset):
+    """Run evaluation using the vLLM backend."""
+    if not VLLM_AVAILABLE:
+        raise ImportError("vLLM is not installed. Please install it to use the 'vllm' backend.")
+
+    logger.info(f"Loading model with vLLM from {cfg.model.model_name_or_path}...")
+    llm = LLM(
+        model=cfg.model.model_name_or_path,
+        dtype=cfg.model.dtype,
+        tensor_parallel_size=cfg.vllm.num_gpus,
+        trust_remote_code=True,
+    )
+    
+    # Convert generation config to dict for SamplingParams
+    gen_dict = OmegaConf.to_container(cfg.generation, resolve=True)
+    sampling_params = SamplingParams(**gen_dict)
+    
+    prompts = dataset["prompt"]
+    logger.info(f"Generating responses for {len(prompts)} prompts with vLLM...")
+    outputs = llm.generate(prompts, sampling_params)
+    responses = [output.outputs[0].text for output in outputs]
+    
+    evaluate_and_save_results(
+        prompts=prompts,
+        responses=responses,
+        ground_truths=dataset["ground_truth"],
+        reward_fn=r1_zero_reward_fn,
+        output_dir=cfg.output_dir,
+    )
+
+
+def run_hf_evaluation(cfg: ScriptArguments, dataset: Dataset):
+    """Run evaluation using the Hugging Face Transformers backend."""
+    logger.info(f"Loading model with Transformers from {cfg.model.model_name_or_path}...")
+    tokenizer = AutoTokenizer.from_pretrained(cfg.model.model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(
+        cfg.model.model_name_or_path,
+        dtype=cfg.model.dtype,
+        device_map="auto",
+    )
+    
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    model.eval()
+
+    prompts = [prompt for prompt in dataset["prompt"]]
+    
+    # Convert generation config to dict for generate()
+    generation_kwargs = {
+        'max_new_tokens': cfg.generation.max_tokens,
+        'do_sample': True,
+        "pad_token_id": tokenizer.pad_token_id,
+        "bos_token_id": tokenizer.bos_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+        'temperature': cfg.generation.temperature,
+        'top_p': cfg.generation.top_p,
+    }
+    generation_config = GenerationConfig(**generation_kwargs)
+
+    logger.info(f"Generating responses for {len(prompts)} prompts with HF Transformers...")
+
+    # Batch generation
+    batch_size = 1
+    all_prompts_text = []
+    all_completions_text = []
+    
+    for i in tqdm(range(0, len(prompts), batch_size), desc="Generating batches"):
+        batch_prompts = prompts[i:i + batch_size]
+        
+        prompt_inputs = tokenizer(
+            batch_prompts, return_tensors="pt",
+            padding=True, padding_side="left",
+            add_special_tokens=True,
+        ).to(model.device)
+        
+        with torch.no_grad():
+            prompt_completion_ids = model.generate(
+                **prompt_inputs,
+                generation_config=generation_config,
+            )
+        
+        prompt_length = prompt_inputs['input_ids'].size(1)
+        prompt_ids = prompt_completion_ids[:, :prompt_length]
+        completion_ids = prompt_completion_ids[:, prompt_length:]
+        
+        batch_prompts_text = tokenizer.batch_decode(
+            prompt_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False
+        )
+        batch_prompts_text = [
+            re.sub(rf"^({re.escape(tokenizer.pad_token)})+", "", text) for text in batch_prompts_text
+        ]
+        
+        batch_completions_text = tokenizer.batch_decode(
+            completion_ids, skip_special_tokens=True
+        )
+        
+        all_prompts_text.extend(batch_prompts_text)
+        all_completions_text.extend(batch_completions_text)
+
+    evaluate_and_save_results(
+        prompts=all_prompts_text,
+        responses=all_completions_text,
+        ground_truths=dataset["ground_truth"],
+        reward_fn=r1_zero_reward_fn,
+        output_dir=cfg.output_dir,
+    )
+
+
+@hydra.main(config_path="conf", config_name="eval_math", version_base=None)
+def main(cfg: ScriptArguments):
+    # Set random seed for reproducibility
+    random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    
+    logger.info("Starting evaluation script...")
+    # Use OmegaConf.to_yaml to handle the dataclass structure
+    logger.info(f"Running with config:\n{OmegaConf.to_yaml(cfg)}")
+    
+    prompt_template = load_prompt_template(cfg.prompt_name)
+    
+    dataset = load_dataset_flexible(cfg.dataset)
+    
+    dataset = dataset.map(
+        lambda sample: process_math_example(sample, prompt_template),
+        desc="Formatting prompts"
+    )
+    
+    logger.info("First processed example:")
+    logger.info(json.dumps(dataset[0], indent=2))
+    
+    if cfg.backend == "vllm":
+        run_vllm_evaluation(cfg, dataset)
+    elif cfg.backend == "hf":
+        run_hf_evaluation(cfg, dataset)
+    else:
+        raise ValueError(f"Invalid backend: {cfg.backend}. Must be 'vllm' or 'hf'.")
+        
+    logger.info(f"Evaluation complete! Results saved to {cfg.output_dir}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+        stream=sys.stdout,
+    )
+    main()

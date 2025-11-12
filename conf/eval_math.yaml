@@ -1,0 +1,50 @@
+# @package _global_
+
+# Hydra settings
+hydra:
+  run:
+    dir: ckpt/eval/runs/${now:%Y-%m-%d}_${now:%H-%M-%S}
+  job:
+    name: evaluate_math
+
+# Backend: 'vllm' or 'hf'
+backend: vllm
+
+# Model configuration
+model:
+  model_name_or_path: "models/Qwen2.5-Math-1.5B"
+  dtype: bfloat16
+
+# Dataset configuration
+dataset:
+  type: "local" # 'local' or 'huggingface'
+  data_path: "data/Math/validation.jsonl"
+  dataset_name: null # e.g., "HuggingFaceH4/MATH-500"
+  dataset_split: null # e.g., "test"
+  num_samples: null # Set to an integer to sample a subset of the data, e.g., 50
+
+# Prompt template
+prompt_name: "r1_zero"
+
+# Generation parameters
+# These are backend-specific.
+# For vLLM, these map to SamplingParams.
+# For HF, these map to generate() arguments.
+generation:
+  temperature: 1.0
+  top_p: 1.0
+  max_tokens: 32768 # For HF, this is max_new_tokens
+  stop: ["</answer>"]
+  include_stop_str_in_output: true # vLLM specific
+  # HF specific generation args can be added here
+  # e.g., do_sample: true
+
+# vLLM specific settings
+vllm:
+  num_gpus: 1
+
+# Output directory for results
+output_dir: "outputs/math_evaluation"
+
+# Random seed
+seed: 42
