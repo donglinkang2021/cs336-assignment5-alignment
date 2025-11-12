@@ -875,13 +875,16 @@
         function renderField(value) {
             const strValue = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
             
-            // Preprocess LaTeX environments to wrap them
-            let processedValue = preprocessLatex(strValue);
+            // First escape all HTML to preserve tags like <think>, <answer>, etc.
+            const escapedValue = escapeHtml(strValue);
             
-            // Process [asy]...[/asy] blocks
+            // Preprocess LaTeX environments to wrap them (after escaping)
+            let processedValue = preprocessLatex(escapedValue);
+            
+            // Process [asy]...[/asy] blocks (these need to be rendered as HTML)
             processedValue = processAsyBlocks(processedValue);
             
-            // Create a div and set textContent to avoid XSS, but preserve LaTeX
+            // Create a div with the processed content
             const div = document.createElement('div');
             div.className = 'field-content raw';
             div.innerHTML = processedValue;
