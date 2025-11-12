@@ -29,10 +29,9 @@ import hydra
 import torch
 from datasets import load_dataset
 from omegaconf import DictConfig, OmegaConf
-from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, get_scheduler
+from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
 from vllm_sync import VLLMClient
 
 from cs336_alignment.sft_utils import (
@@ -41,6 +40,7 @@ from cs336_alignment.sft_utils import (
     sft_microbatch_train_step,
 )
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from cs336_alignment.optimizer import MemoryEfficientAdamW
 from sft_config import ScriptArguments
 
 logger = logging.getLogger(__name__)
@@ -236,14 +236,14 @@ def train(cfg: ScriptArguments):
     )
     
     # Setup optimizer
-    optimizer = AdamW(
+    optimizer = MemoryEfficientAdamW(
         model.parameters(),
         lr=cfg.training.learning_rate,
         weight_decay=cfg.training.weight_decay,
     )
     
     # Calculate total training steps
-    num_training_steps = len(train_loader) * cfg.training.num_epochs
+    num_training_steps = len(train_loader) * cfg.training.num_epochs // cfg.training.gradient_accumulation_steps
     num_warmup_steps = int(num_training_steps * cfg.training.warmup_ratio)
     
     # Setup learning rate scheduler
@@ -277,7 +277,7 @@ def train(cfg: ScriptArguments):
     logger.info(f"  Num epochs = {cfg.training.num_epochs}")
     logger.info(f"  Batch size = {cfg.training.batch_size}")
     logger.info(f"  Gradient accumulation steps = {cfg.training.gradient_accumulation_steps}")
-    logger.info(f"  Total optimization steps = {num_training_steps // cfg.training.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {num_training_steps}")
     
     for epoch in range(cfg.training.num_epochs):
         logger.info(f"Epoch {epoch + 1}/{cfg.training.num_epochs}")

@@ -101,7 +101,7 @@ def tokenize_prompt_and_output(
     }
 
 # uv run pytest -k test_compute_entropy
-def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
+def compute_entropy_naive(logits: torch.Tensor) -> torch.Tensor:
     """Get the entropy over the vocabulary dimension.
 
     Args:
@@ -115,6 +115,40 @@ def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
     probs = logits.softmax(dim=-1) # (B, T, V)
     entropy = logits.logsumexp(dim=-1) - (probs * logits).sum(dim=-1) # (B, T)
     return entropy
+
+def compute_entropy(logits:torch.Tensor, chunk_size:int=128) -> torch.Tensor:
+    """Memory-efficient implementation of `compute_entropy`."""
+    num_chunks = (logits.shape[1] + chunk_size - 1) // chunk_size
+    entropy_chunks = []
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = min((i + 1) * chunk_size, logits.shape[1])
+        chunk_logits = logits[:, start_idx:end_idx, :]
+        # Use the numerically stable method for torch.bfloat16, do not use logsumexp
+        chunk_probs = chunk_logits.softmax(dim=-1)
+        chunk_log_probs = chunk_logits.log_softmax(dim=-1)
+        chunk_entropy = -(chunk_probs * chunk_log_probs).sum(dim=-1)
+        entropy_chunks.append(chunk_entropy)
+    return torch.cat(entropy_chunks, dim=1)
+
+def selective_log_softmax_naive(logits:torch.Tensor, index:torch.Tensor) -> torch.Tensor:
+    """Naive implementation of the common `selective_log_softmax` operation"""
+    return logits.log_softmax(dim=-1).gather(
+        dim=-1, index=index.unsqueeze(-1)
+    ).squeeze(-1)
+
+def selective_log_softmax(logits:torch.Tensor, index:torch.Tensor, chunk_size:int=128) -> torch.Tensor:
+    """Memory-efficient implementation of the common `selective_log_softmax` operation"""
+    num_chunks = (logits.shape[1] + chunk_size - 1) // chunk_size
+    log_probs_chunks = []
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = min((i + 1) * chunk_size, logits.shape[1])
+        chunk_logits = logits[:, start_idx:end_idx, :]
+        chunk_log_probs = chunk_logits.log_softmax(dim=-1)
+        chunk_log_probs = chunk_log_probs.gather(dim=-1, index=index[:, start_idx:end_idx].unsqueeze(-1)).squeeze(-1)
+        log_probs_chunks.append(chunk_log_probs)
+    return torch.cat(log_probs_chunks, dim=1)
 
 # uv run pytest -k test_get_response_log_probs
 def get_response_log_probs(
@@ -147,9 +181,7 @@ def get_response_log_probs(
                 or padding; that is done in the train loop.
     """
     logits:torch.Tensor = model(input_ids).logits  # (B, T, V)
-    log_probs = logits.log_softmax(dim=-1).gather(
-        dim=-1, index=labels.unsqueeze(-1)
-    ).squeeze(-1)  # (B, T)
+    log_probs = selective_log_softmax(logits, labels)
     output = {"log_probs": log_probs}
     if return_token_entropy:
         output["token_entropy"] = compute_entropy(logits)  # (B, T)

@@ -17,8 +17,8 @@ training:
   _target_: sft_config.TrainingConfig
   output_dir: ckpt/sft_omr12k
   num_epochs: 1
-  batch_size: 4
-  gradient_accumulation_steps: 4
+  batch_size: 2
+  gradient_accumulation_steps: 8
   learning_rate: 5e-6
   weight_decay: 0.01
   max_grad_norm: 1.0
@@ -29,7 +29,7 @@ training:
 evaluation:
   _target_: sft_config.EvaluationConfig
   eval_steps: 50
-  save_steps: 0
+  save_steps: 100
   max_eval_examples: 100
   use_vllm_eval: true
   generation_temperature: 1.0

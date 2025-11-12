@@ -2,6 +2,7 @@
 
 事情有点多，先写一下来捋清自己的思路
 
+- 但是如果要执行测试记得把 rope_theta 给改回来，否则计算的值不match了
 - 为了实现长上下文扩展这里将 Qwen2.5-Math-1.5B 的 config.json
     - rope_theta 10000 -> 160000
     - max_position_embeddings 4096 -> 32768
