@@ -40,7 +40,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from xopen import xopen
 
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
-from cs336_alignment.eval_config import ScriptArguments, DatasetConfig
+from cs336_alignment.config.eval_config import ScriptArguments, DatasetConfig
+from cs336_alignment.utils import load_prompt_template
 
 # Conditional import for vLLM
 try:
@@ -50,15 +51,6 @@ except ImportError:
     VLLM_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
-
-
-
-def load_prompt_template(prompt_name: str) -> str:
-    """Load a prompt template from the prompts directory."""
-    # Assuming the script is run from the root of the project
-    prompt_path = Path("cs336_alignment") / "prompts" / f"{prompt_name}.prompt"
-    with open(prompt_path) as f:
-        return f.read()
 
 
 def load_dataset_flexible(cfg: DatasetConfig) -> Dataset:

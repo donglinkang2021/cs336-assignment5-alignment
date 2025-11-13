@@ -41,10 +41,17 @@ from cs336_alignment.sft_utils import (
 )
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 from cs336_alignment.optimizer import MemoryEfficientAdamW
-from cs336_alignment.config.sft_config import ScriptArguments
-from cs336_alignment.utils import load_prompt_template
+from cs336_alignment.sft_config import ScriptArguments
 
 logger = logging.getLogger(__name__)
+
+
+def load_prompt_template(prompt_name: str) -> str:
+    """Load a prompt template from the prompts directory."""
+    prompt_path = Path("cs336_alignment") / "prompts" / f"{prompt_name}.prompt"
+    with open(prompt_path) as f:
+        return f.read()
+
 
 class SFTDataset(Dataset):
     """Dataset for SFT training."""
