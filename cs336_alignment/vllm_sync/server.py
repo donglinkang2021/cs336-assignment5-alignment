@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 os.environ["VLLM_WORKER_MULTIPROC_METHOD"] = "spawn"
 
 
-@hydra.main(version_base=None, config_path=".", config_name="server")
+@hydra.main(version_base=None, config_path="../../conf", config_name="vllm_server")
 def main(script_args: ScriptArguments):
     """
     Main entry point for the vLLM server.

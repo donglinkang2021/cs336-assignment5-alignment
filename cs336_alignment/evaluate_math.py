@@ -279,7 +279,7 @@ def run_hf_evaluation(cfg: ScriptArguments, dataset: Dataset):
     )
 
 
-@hydra.main(config_path="conf", config_name="eval_math", version_base=None)
+@hydra.main(config_path="../conf", config_name="eval_math", version_base=None)
 def main(cfg: ScriptArguments):
     # Set random seed for reproducibility
     random.seed(cfg.seed)

@@ -4,8 +4,9 @@ set -e  # Exit on error
 # e.g., bash run_vllm_server.sh
 
 export WANDB_MODE=offline
+export WANDB_ARTIFACT_DIR="wandb/artifacts"
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
-uv run train_sft.py
+uv run cs336_alignment/train_sft.py

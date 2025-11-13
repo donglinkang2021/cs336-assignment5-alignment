@@ -33,7 +33,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
-from vllm_sync import VLLMClient
+from cs336_alignment.vllm_sync import VLLMClient
 
 from cs336_alignment.sft_utils import (
     tokenize_prompt_and_output,
@@ -213,7 +213,7 @@ def log_eval_metrics(eval_metrics:Dict, cfg:ScriptArguments, eval_step:int):
     logger.info(f"  Avg Length (Incorrect): {eval_metrics['avg_response_length/incorrect']:.1f}")
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="sft_config")
+@hydra.main(version_base=None, config_path="../conf", config_name="sft_config")
 def train(cfg: ScriptArguments):
     """Main training function."""
     logging.basicConfig(

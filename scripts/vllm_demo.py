@@ -1,5 +1,5 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from vllm_sync import VLLMClient
+from cs336_alignment.vllm_sync import VLLMClient
 
 def generate_text(client:VLLMClient, tokenizer: AutoTokenizer):
     """Generate text using the VLLM client."""

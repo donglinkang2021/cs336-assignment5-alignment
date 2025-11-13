@@ -59,7 +59,7 @@ def llm_worker(
         enable_prefix_caching=script_args.enable_prefix_caching,
         kv_cache_dtype=script_args.kv_cache_dtype,
         max_model_len=script_args.max_model_len,
-        worker_extension_cls="vllm_sync.WeightSyncWorkerExtension",
+        worker_extension_cls="cs336_alignment.vllm_sync.WeightSyncWorkerExtension",
         trust_remote_code=script_args.trust_remote_code,
         model_impl=script_args.vllm_model_impl,
     )

@@ -35,19 +35,19 @@ functions in [./tests/adapters.py](./tests/adapters.py).
 Launch the vllm server and SFT on your data:
 
 ```bash
-bash run_vllm_server.sh
-bash run_sft_test.sh
+bash scripts/run_vllm_server.sh
+bash scripts/run_sft_test.sh
 ```
 
 To sync the wandb log:
 
 ```bash
-bash sync_wandb.sh
+bash scripts/sync_wandb.sh
 ```
 
 Evaluate your results(use vllm), and visualize them:
 
 ```bash
-bash eval.sh # set your MODEL_NAME and MODEL_PATH
-bash extra/launch_server.sh # visualize all the .jsonl data
+bash scripts/eval.sh # set your MODEL_NAME and MODEL_PATH
+bash scripts/launch_server.sh # visualize all the .jsonl data
 ```
