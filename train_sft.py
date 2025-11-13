@@ -25,6 +25,7 @@ import random
 from pathlib import Path
 from typing import Dict, List
 
+import wandb
 import hydra
 import torch
 from datasets import load_dataset
@@ -96,18 +97,20 @@ def collate_fn(batch: List[Dict], tokenizer):
         "ground_truths": ground_truths,
     }
 
+def mean(values: List[float]) -> float:
+    """Calculate mean of a list of values."""
+    return sum(values) / len(values) if values else 0.0
+
 def evaluate_model(
     vllm_client: VLLMClient,
     tokenizer: AutoTokenizer,
     val_dataset: SFTDataset,
     generation_kwargs: dict,
     max_examples: int = 100,
+    log_samples: int = 5, 
 ) -> Dict:
     """
     Evaluate the model on validation set using VLLMClient.
-    
-    Returns:
-        Dictionary with evaluation metrics
     """
     # Sample a subset for evaluation
     num_eval = min(max_examples, len(val_dataset))
@@ -119,33 +122,96 @@ def evaluate_model(
     logger.info(f"Generating responses for {len(prompts)} validation examples...")
     
     # Generate responses using VLLMClient
-    output = vllm_client.generate(
-        prompts, n=1, generation_kwargs=generation_kwargs
-    )
+    output = vllm_client.generate(prompts, n=1, generation_kwargs=generation_kwargs)
     
     # Extract generated texts
-    responses = []
-    for completion_ids in output["completion_ids"]:
-        # Decode each completion
-        text = tokenizer.decode(completion_ids, skip_special_tokens=True)
-        responses.append(text)
+    responses = tokenizer.batch_decode(output["completion_ids"], skip_special_tokens=True)
     
-    # Evaluate responses
+    # Evaluate responses and collect detailed metrics
     all_metrics = []
-    for response, ground_truth in zip(responses, ground_truths):
+    examples = []
+    
+    for idx, (prompt, response, ground_truth) in enumerate(zip(prompts, responses, ground_truths)):
         metrics = r1_zero_reward_fn(response, ground_truth)
         all_metrics.append(metrics)
+        
+        # Store example info for logging (first few examples)
+        if idx < log_samples:
+            example_info = {
+                "prompt": prompt,
+                "response": response,
+                "ground_truth": ground_truth,
+                "reward": metrics["reward"],
+                "format_reward": metrics["format_reward"],
+                "answer_reward": metrics["answer_reward"],
+                "response_length": len(response),
+            }
+            examples.append(example_info)
     
     # Calculate aggregate metrics
     aggregate_metrics = {}
     for key in sorted(all_metrics[0].keys()):
-        aggregate_metrics[key] = sum([m[key] for m in all_metrics]) / len(all_metrics)
+        aggregate_metrics[key] = mean([m[key] for m in all_metrics])
     
     # Calculate accuracy (correct answers)
-    accuracy = sum([m["answer_reward"] for m in all_metrics]) / len(all_metrics)
+    accuracy = mean([m["answer_reward"] for m in all_metrics])
     aggregate_metrics["accuracy"] = accuracy
     
+    # Calculate response length statistics
+    response_lengths = [len(r) for r in responses]
+    correct_lengths = [len(responses[i]) for i, m in enumerate(all_metrics) if m["answer_reward"] > 0]
+    incorrect_lengths = [len(responses[i]) for i, m in enumerate(all_metrics) if m["answer_reward"] <= 0]
+    
+    aggregate_metrics["avg_response_length/total"] = mean(response_lengths)
+    aggregate_metrics["avg_response_length/correct"] = mean(correct_lengths)
+    aggregate_metrics["avg_response_length/incorrect"] = mean(incorrect_lengths)
+    
+    # Add examples for wandb logging
+    aggregate_metrics["examples"] = examples
+    
     return aggregate_metrics
+
+def log_eval_metrics(eval_metrics:Dict, cfg:ScriptArguments, eval_step:int):
+    if cfg.logging.use_wandb:
+        # Extract examples before logging
+        examples = eval_metrics.pop("examples", [])
+        
+        # Log evaluation metrics
+        wandb.log({
+            "eval/accuracy": eval_metrics["accuracy"],
+            "eval/reward": eval_metrics["reward"],
+            "eval/format_reward": eval_metrics["format_reward"],
+            "eval/answer_reward": eval_metrics["answer_reward"],
+            "eval/avg_response_length/total": eval_metrics["avg_response_length/total"],
+            "eval/avg_response_length/correct": eval_metrics["avg_response_length/correct"],
+            "eval/avg_response_length/incorrect": eval_metrics["avg_response_length/incorrect"],
+            "eval_step": eval_step,
+        })
+        
+        if examples:
+            table_data = []
+            for ex in examples:
+                table_data.append([
+                    ex["prompt"], ex["response"], ex["ground_truth"],
+                    ex["reward"], ex["format_reward"], ex["answer_reward"],
+                    ex["response_length"],
+                ])
+            
+            table = wandb.Table(
+                columns=[
+                    "Prompt", "Response", "Ground Truth", 
+                    "Reward", "Format Reward", "Answer Reward", 
+                    "Response Length"],
+                data=table_data
+            )
+            wandb.log({"eval/examples": table, "eval_step": eval_step})
+    
+    logger.info(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
+    logger.info(f"  Reward: {eval_metrics['reward']:.4f}")
+    logger.info(f"  Avg Response Length: {eval_metrics['avg_response_length/total']:.1f}")
+    logger.info(f"  Avg Length (Correct): {eval_metrics['avg_response_length/correct']:.1f}")
+    logger.info(f"  Avg Length (Incorrect): {eval_metrics['avg_response_length/incorrect']:.1f}")
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="sft_config")
 def train(cfg: ScriptArguments):
@@ -166,7 +232,6 @@ def train(cfg: ScriptArguments):
     
     # Setup wandb if enabled
     if cfg.logging.use_wandb:
-        import wandb
         
         # Set default wandb run name if not provided
         wandb_run_name = cfg.logging.wandb_run_name
@@ -362,20 +427,7 @@ def train(cfg: ScriptArguments):
                     
                     eval_step += 1
                     
-                    # Log evaluation metrics
-                    eval_log = {
-                        "eval/accuracy": eval_metrics["accuracy"],
-                        "eval/reward": eval_metrics["reward"],
-                        "eval/format_reward": eval_metrics["format_reward"],
-                        "eval/answer_reward": eval_metrics["answer_reward"],
-                        "eval_step": eval_step,
-                    }
-                    
-                    if cfg.logging.use_wandb:
-                        wandb.log(eval_log)
-                    
-                    logger.info(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
-                    logger.info(f"  Reward: {eval_metrics['reward']:.4f}")
+                    log_eval_metrics(eval_metrics, cfg, eval_step)
                     
                     # Save best model
                     if eval_metrics["accuracy"] > best_accuracy:

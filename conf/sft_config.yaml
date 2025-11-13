@@ -11,7 +11,7 @@ data:
   prompt_name: r1_zero
 
 training:
-  output_dir: ckpt/sft_omr12k_1
+  output_dir: ckpt/sft_omr12k_2
   num_epochs: 1
   batch_size: 2
   gradient_accumulation_steps: 8
@@ -34,7 +34,7 @@ evaluation:
 logging:
   use_wandb: true
   wandb_project: cs336-align
-  wandb_run_name: null
+  wandb_run_name: sft_omr12k
 
 hydra:
   run:
