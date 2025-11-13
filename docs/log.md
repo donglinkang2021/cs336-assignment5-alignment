@@ -1,5 +1,9 @@
 # Log
 
+## [0.0.4] - 2025.11.13
+
+- move jsonl server to extra repo, add readme for how to use it
+
 ## [0.0.3] - 2025.11.09
 
 - 参考之前的 [here](https://github.com/donglinkang2021/minimal-openrs/blob/main/trainer/grpo_trainer.py#L1085-L1091) 重新实现了一下 generate_and_score 的过程，主要写在了 log_generations 里面；

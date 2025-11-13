@@ -2,7 +2,7 @@
 """
 Simple HTTP server to view HTML files with API support
 Usage: python server.py [port]
-Default port: 8000
+Default port: auto-detect starting from 8000
 """
 
 import http.server
@@ -11,22 +11,34 @@ import sys
 import os
 import json
 import urllib.parse
+import socket
 from pathlib import Path
 from datetime import datetime
 
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
-from rich.text import Text
 from rich import box
 
 console = Console()
 
-# Set port
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
+def find_free_port(start_port=8000, max_attempts=100):
+    """Find a free port starting from start_port"""
+    for port in range(start_port, start_port + max_attempts):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('', port))
+                return port
+        except OSError:
+            continue
+    raise RuntimeError(f"Could not find a free port in range {start_port}-{start_port + max_attempts}")
 
-# Change to the script's directory
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# Set port: use command line argument if provided, otherwise find a free port
+if len(sys.argv) > 1:
+    PORT = int(sys.argv[1])
+else:
+    PORT = find_free_port()
+    console.print(f"[bold cyan]🔍 Auto-detected free port: {PORT}[/bold cyan]")
 
 class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
@@ -50,6 +62,7 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """List all .jsonl files in the current directory"""
         try:
             current_dir = Path('.')
+            print(current_dir.absolute())
             jsonl_files = []
             
             # Find all .jsonl files
@@ -137,8 +150,7 @@ def run_server():
         table.add_row("🔌 Port", str(PORT))
         table.add_row("🖥️  Hostname", hostname)
         table.add_row("", "")
-        table.add_row("🌐 Local URL", f"http://localhost:{PORT}/outputs/jsonl_viewer.html")
-        table.add_row("🌐 Network URL", f"http://{hostname}:{PORT}/outputs/viewer.html")
+        table.add_row("🌐 Local URL", f"http://localhost:{PORT}/extra/jsonl_viewer.html")
         table.add_row("", "")
         table.add_row("📡 API 1", "GET /api/list-files")
         table.add_row("📡 API 2", "GET /api/load-file?file=<path>")
