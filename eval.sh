@@ -5,11 +5,11 @@ set -u  # Error on unset variables
 set -o pipefail  # Fail a pipeline if any command fails
 
 export HF_HUB_OFFLINE=1
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=3
 
 # Use more descriptive variable names and add read-only protection
-readonly MODEL_NAME="qwen2.5-math-1.5b-sft"
-readonly MODEL_PATH="ckpt/sft_omr12k/best_model"
+readonly MODEL_NAME="qwen2.5-math-1.5b-sft-final"
+readonly MODEL_PATH="ckpt/sft_omr12k_1/final_model"
 
 # Check if the model path exists
 if [ ! -d "$MODEL_PATH" ]; then
@@ -22,13 +22,13 @@ echo "Evaluating on Math validation set..."
 python evaluate_math.py backend=vllm \
     model.model_name_or_path="$MODEL_PATH" \
     dataset.data_path=data/Math/validation.jsonl \
-    output_dir="outputs/${MODEL_NAME}/math_local"
+    output_dir="results_eval/${MODEL_NAME}/math_local"
 
 echo "Evaluating on GSM8K test set..."
 python evaluate_math.py backend=vllm \
     model.model_name_or_path="$MODEL_PATH" \
     dataset.data_path=data/gsm8k/test.jsonl \
-    output_dir="outputs/${MODEL_NAME}/gsm8k_local"
+    output_dir="results_eval/${MODEL_NAME}/gsm8k_local"
 
 echo "Evaluating on MATH-500 HuggingFace dataset..."
 python evaluate_math.py backend=vllm \
@@ -36,7 +36,7 @@ python evaluate_math.py backend=vllm \
     dataset.type=huggingface \
     dataset.dataset_name=HuggingFaceH4/MATH-500 \
     dataset.dataset_split=test \
-    output_dir="outputs/${MODEL_NAME}/math500_hf"
+    output_dir="results_eval/${MODEL_NAME}/math500_hf"
 
 echo "All evaluations completed successfully!"
 

@@ -33,7 +33,7 @@ evaluation:
 
 logging:
   use_wandb: true
-  wandb_project: cs336-align
+  wandb_project: cs336-assignment5-alignment
   wandb_run_name: sft_omr12k
 
 hydra:

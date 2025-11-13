@@ -42,7 +42,7 @@ bash run_sft_test.sh
 To sync the wandb log:
 
 ```bash
-wandb sync --sync-all wandb/
+bash sync_wandb.sh
 ```
 
 Evaluate your results(use vllm), and visualize them:

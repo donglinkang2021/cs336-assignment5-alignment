@@ -2,6 +2,8 @@
 
 事情有点多，先写一下来捋清自己的思路
 
+- 【better package management】调整一下包管理才行，把代码包全部丢到 cs336_alignment 中去
+- 【better sft script】目前的显存占用还是太大了，之后打算用accelerate来加速一下，这样同时也满足了多卡多节点的训练要求
 - 【better sft script】还是打算先完善一下可打印的metric，方便后面去eval
 - 测试一下sft的模型的效果的如何，打算用vllm和hf的推理同时测一下
 - 但是如果要执行测试记得把 rope_theta 给改回来，否则计算的值不match了
