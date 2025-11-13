@@ -16,11 +16,9 @@ As in previous assignments, we use `uv` to manage dependencies.
 ```
 uv sync --no-install-package flash-attn
 uv sync # if this takes too long, see instructions below to install flash-attn manually
-
-bash get-flash-attn.sh
-uv pip install flash_attn-2.7.4.post1+cu12torch2.5cxx11abiFALSE-cp312-cp312-linux_x86_64.whl
-uv sync # to make sure everything is installed
 ```
+
+> Update 2025.11.13: Just run after `uv sync`, `uv add flash-attn` is so fast;
 
 2. Run unit tests:
 
@@ -32,22 +30,17 @@ Initially, all tests should fail with `NotImplementedError`s.
 To connect your implementation to the tests, complete the
 functions in [./tests/adapters.py](./tests/adapters.py).
 
-## Data
+## SFT
+
+Launch the vllm server and SFT on your data:
 
 ```bash
-du -h --max-depth=1 $HF_HOME/hub/
+bash run_vllm_server.sh
+bash run_sft_test.sh
 ```
 
-遇到报错
+To sync the wandb log:
 
 ```bash
-Loading a dataset cached in a LocalFileSystem is not supported.
-```
-
-解决方法：更新fsspec和datasets包
-
-```bash
-uv remove fsspec datasets
-uv pip install -U fsspec
-uv pip install -U datasets
+wandb sync --sync-all wandb/
 ```
