@@ -44,3 +44,10 @@ To sync the wandb log:
 ```bash
 wandb sync --sync-all wandb/
 ```
+
+Evaluate your results(use vllm), and visualize them:
+
+```bash
+bash eval.sh # set your MODEL_NAME and MODEL_PATH
+bash extra/launch_server.sh # visualize all the .jsonl data
+```
