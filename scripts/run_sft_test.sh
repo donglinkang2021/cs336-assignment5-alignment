@@ -4,7 +4,7 @@ set -e  # Exit on error
 # e.g., bash run_vllm_server.sh
 
 export WANDB_MODE=offline
-export WANDB_ARTIFACT_DIR="wandb/artifacts"
+export WANDB_DATA_DIR="wandb"
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1

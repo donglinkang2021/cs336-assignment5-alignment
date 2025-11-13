@@ -1,2 +1,2 @@
-export WANDB_ARTIFACT_DIR="wandb/artifacts"
+export WANDB_DATA_DIR="wandb"
 wandb sync --sync-all wandb/
