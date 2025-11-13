@@ -5,5 +5,5 @@ For better evaluate the result of the model or the original datasets, just write
 To launch the server:
 
 ```bash
-bash extra/launch_server.sh
+bash scripts/launch_server.sh
 ```

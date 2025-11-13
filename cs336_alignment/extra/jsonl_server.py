@@ -150,7 +150,7 @@ def run_server():
         table.add_row("🔌 Port", str(PORT))
         table.add_row("🖥️  Hostname", hostname)
         table.add_row("", "")
-        table.add_row("🌐 Local URL", f"http://localhost:{PORT}/extra/jsonl_viewer.html")
+        table.add_row("🌐 Local URL", f"http://localhost:{PORT}/cs336_alignment/extra/jsonl_viewer.html")
         table.add_row("", "")
         table.add_row("📡 API 1", "GET /api/list-files")
         table.add_row("📡 API 2", "GET /api/load-file?file=<path>")
