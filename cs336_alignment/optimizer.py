@@ -68,7 +68,7 @@ class MemoryEfficientAdamW(AdamW):
                     # Store optimizer states on CPU with pinned memory
                     device = "cpu"
                     pin_memory = self.pin_memory
-                    dtype = torch.bfloat16
+                    dtype = torch.float32
 
                     state["exp_avg"] = torch.zeros_like(
                         p.data, device=device, pin_memory=pin_memory, dtype=dtype
