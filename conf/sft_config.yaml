@@ -1,21 +1,17 @@
-_target_: sft_config.ScriptArguments
 
 model:
-  _target_: sft_config.ModelConfig
   model_name_or_path: models/Qwen2.5-Math-1.5B
   dtype: bfloat16
   gradient_checkpointing: true
 
 data:
-  _target_: sft_config.DataConfig
   train_data_path: data/OMR12k-formated/train.jsonl
   val_data_path: data/OMR12k-formated/validation.jsonl
   num_train_examples: null
   prompt_name: r1_zero
 
 training:
-  _target_: sft_config.TrainingConfig
-  output_dir: ckpt/sft_omr12k
+  output_dir: ckpt/sft_omr12k_1
   num_epochs: 1
   batch_size: 2
   gradient_accumulation_steps: 8
@@ -27,7 +23,6 @@ training:
   seed: 42
 
 evaluation:
-  _target_: sft_config.EvaluationConfig
   eval_steps: 50
   save_steps: 100
   max_eval_examples: 100
@@ -37,8 +32,7 @@ evaluation:
   generation_max_tokens: 32768
 
 logging:
-  _target_: sft_config.LoggingConfig
-  use_wandb: false
+  use_wandb: true
   wandb_project: cs336-align
   wandb_run_name: null
 

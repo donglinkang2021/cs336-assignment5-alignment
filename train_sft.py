@@ -80,7 +80,7 @@ class SFTDataset(Dataset):
     
     def __getitem__(self, idx):
         prompt = self.prompt_template.format(question=self.dataset[idx].get("problem", ""))
-        response = self.dataset[idx].get("generated_solution", "")
+        response = self.dataset[idx].get("generated_solution", "").lstrip("<think>\n")
         ground_truth = self.dataset[idx].get("expected_answer", "")
         return { "prompt": prompt, "response": response, "ground_truth": ground_truth}
 
@@ -154,10 +154,17 @@ def evaluate_model(
     
     return aggregate_metrics
 
-
+@hydra.main(version_base=None, config_path="conf", config_name="sft_config")
 def train(cfg: ScriptArguments):
     """Main training function."""
-    
+    logging.basicConfig(
+        format="%(asctime)s - %(module)s - %(levelname)s - %(message)s",
+        level=logging.INFO,
+    )
+    # Log configuration
+    logger.info("Configuration:")
+    logger.info(OmegaConf.to_yaml(cfg))
+
     # Set random seeds
     random.seed(cfg.training.seed)
     torch.manual_seed(cfg.training.seed)
@@ -200,6 +207,8 @@ def train(cfg: ScriptArguments):
         dtype=cfg.model.dtype,
         use_cache = not cfg.model.gradient_checkpointing,
     ).to("cuda:0")
+    # model.config._attn_implementation = "flash_attention_2"
+    # model = torch.compile(model)
     model.train()
 
     # Enable gradient checkpointing if requested
@@ -405,25 +414,5 @@ def train(cfg: ScriptArguments):
     
     logger.info(f"Training completed! Best accuracy: {best_accuracy:.4f}")
 
-
-@hydra.main(version_base=None, config_path="conf", config_name="sft_config")
-def main(cfg: DictConfig) -> None:
-    """Main entry point with Hydra configuration."""
-    logging.basicConfig(
-        format="%(asctime)s - %(module)s - %(levelname)s - %(message)s",
-        level=logging.INFO,
-    )
-    
-    # Convert DictConfig to ScriptArguments dataclass
-    script_args:ScriptArguments = hydra.utils.instantiate(cfg, _convert_="object")
-    
-    # Log configuration
-    logger.info("Configuration:")
-    logger.info(OmegaConf.to_yaml(cfg))
-    
-    # Run training
-    train(script_args)
-
-
 if __name__ == "__main__":
-    main()
+    train()

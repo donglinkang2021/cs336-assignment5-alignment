@@ -35,7 +35,7 @@ python evaluate_math.py backend=vllm \
     model.model_name_or_path="$MODEL_PATH" \
     dataset.type=huggingface \
     dataset.dataset_name=HuggingFaceH4/MATH-500 \
-    dataset.split=test \
+    dataset.dataset_split=test \
     output_dir="outputs/${MODEL_NAME}/math500_hf"
 
 echo "All evaluations completed successfully!"
