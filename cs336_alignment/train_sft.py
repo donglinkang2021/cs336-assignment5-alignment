@@ -263,10 +263,9 @@ def train(cfg: ScriptArguments):
     model = AutoModelForCausalLM.from_pretrained(
         cfg.model.model_name_or_path,
         dtype=cfg.model.dtype,
+        attn_implementation=cfg.model.attn_implementation,
         use_cache = not cfg.model.gradient_checkpointing,
     ).to("cuda:0")
-    # model.config._attn_implementation = "flash_attention_2"
-    # model = torch.compile(model)
     model.train()
 
     # Enable gradient checkpointing if requested

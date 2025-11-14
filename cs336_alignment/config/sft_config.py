@@ -12,6 +12,7 @@ class ModelConfig:
     model_name_or_path: str = "models/Qwen2.5-Math-1.5B"
     dtype: str = "bfloat16"
     gradient_checkpointing: bool = False
+    attn_implementation: str = "flash_attention_2"
 
 
 @dataclass

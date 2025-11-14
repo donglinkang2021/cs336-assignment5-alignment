@@ -3,6 +3,7 @@ model:
   model_name_or_path: models/Qwen2.5-Math-1.5B
   dtype: bfloat16
   gradient_checkpointing: true
+  attn_implementation: flash_attention_2
 
 data:
   train_data_path: data/OMR12k-formated/train.jsonl
