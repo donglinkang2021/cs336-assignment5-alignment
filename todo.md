@@ -2,9 +2,11 @@
 
 事情有点多，先写一下来捋清自己的思路
 
-- 【better package management】调整一下包管理才行，把代码包全部丢到 cs336_alignment 中去
-- 【better sft script】目前的显存占用还是太大了，之后打算用accelerate来加速一下，这样同时也满足了多卡多节点的训练要求
-- 【better sft script】还是打算先完善一下可打印的metric，方便后面去eval
+- [better train]目前的显存占用还是太大了，之后打算用accelerate来加速一下，这样同时也满足了多卡多节点的训练要求
+- [better sft]目前数据集的处理还没有好好看数据集是如何处理的，主要是各种长度导致自己现在的利用率很低，而且可以看到目前很多回答对的长度基本都是小于2048的，打算挑选一波短数据来sft，具体而言打算参考一下 smolm3 的做法，记得他有个脚本是专门讲长文训练的，觉得目前阶段还是打算挑两波数据，挑一个是回复长度小于4096的版本和小于2048的版本；
+- 目前测试了 gradient_checkpointing, flash_attention_2 对 最大 batch_size 的影响；
+- 调整一下包管理才行，把代码包全部丢到 cs336_alignment 中去
+- 还是打算先完善一下可打印的metric，方便后面去eval
 - 测试一下sft的模型的效果的如何，打算用vllm和hf的推理同时测一下
 - 但是如果要执行测试记得把 rope_theta 给改回来，否则计算的值不match了
 - 为了实现长上下文扩展这里将 Qwen2.5-Math-1.5B 的 config.json
