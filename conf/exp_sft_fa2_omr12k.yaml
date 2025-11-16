@@ -1,0 +1,15 @@
+defaults:
+  - sft_config
+
+model:
+  attn_implementation: flash_attention_2
+
+training:
+  output_dir: ckpt/sft_fa2_omr12k
+
+logging:
+  use_wandb: true
+  wandb_project: cs336-assignment5-alignment
+  wandb_run_name: sft_fa2_omr12k
+
+# uv run cs336_alignment/train_sft.py --config-name exp_sft_fa2_omr12k
