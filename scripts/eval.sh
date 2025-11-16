@@ -8,8 +8,11 @@ export HF_HUB_OFFLINE=1
 export CUDA_VISIBLE_DEVICES=3
 
 # Use more descriptive variable names and add read-only protection
-readonly MODEL_NAME="qwen2.5-math-1.5b-sft-final1"
-readonly MODEL_PATH="ckpt/sft_omr12k_1/final_model"
+# readonly MODEL_NAME="qwen2.5-math-1.5b-original"
+# readonly MODEL_PATH="models/Qwen2.5-Math-1.5B"
+readonly MODEL_NAME="qwen2.5-math-1.5b-sft-omr4096-12k/checkpoint-200"
+readonly MODEL_PATH="ckpt/exp_sft_omr4096_12k/checkpoint-200"
+
 
 # Check if the model path exists
 if [ ! -d "$MODEL_PATH" ]; then
