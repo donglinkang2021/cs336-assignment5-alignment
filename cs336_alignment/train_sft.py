@@ -107,7 +107,6 @@ def evaluate_model(
     val_dataset: SFTDataset,
     generation_kwargs: dict,
     max_examples: int = 100,
-    log_samples: int = 5, 
 ) -> Dict:
     """
     Evaluate the model on validation set using VLLMClient.
@@ -129,24 +128,10 @@ def evaluate_model(
     
     # Evaluate responses and collect detailed metrics
     all_metrics = []
-    examples = []
     
     for idx, (prompt, response, ground_truth) in enumerate(zip(prompts, responses, ground_truths)):
         metrics = r1_zero_reward_fn(response, ground_truth)
         all_metrics.append(metrics)
-        
-        # Store example info for logging (first few examples)
-        if idx < log_samples:
-            example_info = {
-                "prompt": prompt,
-                "response": response,
-                "ground_truth": ground_truth,
-                "reward": metrics["reward"],
-                "format_reward": metrics["format_reward"],
-                "answer_reward": metrics["answer_reward"],
-                "response_length": len(response),
-            }
-            examples.append(example_info)
     
     # Calculate aggregate metrics
     aggregate_metrics = {}
@@ -166,16 +151,10 @@ def evaluate_model(
     aggregate_metrics["avg_response_length/correct"] = mean(correct_lengths)
     aggregate_metrics["avg_response_length/incorrect"] = mean(incorrect_lengths)
     
-    # Add examples for wandb logging
-    aggregate_metrics["examples"] = examples
-    
     return aggregate_metrics
 
 def log_eval_metrics(eval_metrics:Dict, cfg:ScriptArguments, eval_step:int):
     if cfg.logging.use_wandb:
-        # Extract examples before logging
-        examples = eval_metrics.pop("examples", [])
-        
         # Log evaluation metrics
         wandb.log({
             "eval/accuracy": eval_metrics["accuracy"],
@@ -187,24 +166,6 @@ def log_eval_metrics(eval_metrics:Dict, cfg:ScriptArguments, eval_step:int):
             "eval/avg_response_length/incorrect": eval_metrics["avg_response_length/incorrect"],
             "eval_step": eval_step,
         })
-        
-        if examples:
-            table_data = []
-            for ex in examples:
-                table_data.append([
-                    ex["prompt"], ex["response"], ex["ground_truth"],
-                    ex["reward"], ex["format_reward"], ex["answer_reward"],
-                    ex["response_length"],
-                ])
-            
-            table = wandb.Table(
-                columns=[
-                    "Prompt", "Response", "Ground Truth", 
-                    "Reward", "Format Reward", "Answer Reward", 
-                    "Response Length"],
-                data=table_data
-            )
-            wandb.log({"eval/examples": table, "eval_step": eval_step})
     
     logger.info(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
     logger.info(f"  Reward: {eval_metrics['reward']:.4f}")
