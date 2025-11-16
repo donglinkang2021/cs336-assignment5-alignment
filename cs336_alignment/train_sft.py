@@ -298,6 +298,7 @@ def train(cfg: ScriptArguments):
     global_step = 0
     eval_step = 0
     best_accuracy = 0.0
+    consumed_tokens = 0  # Track total tokens consumed during training
     
     logger.info("Starting training...")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -342,6 +343,10 @@ def train(cfg: ScriptArguments):
             
             epoch_loss += loss.item()
             
+            # Count tokens in this microbatch (only count response tokens where we compute loss)
+            batch_tokens = response_mask.sum().item()
+            consumed_tokens += batch_tokens
+            
             # Gradient accumulation
             if (step + 1) % cfg.training.gradient_accumulation_steps == 0:
                 # Clip gradients
@@ -361,6 +366,7 @@ def train(cfg: ScriptArguments):
                     "train/loss": loss.item() * cfg.training.gradient_accumulation_steps,
                     "train/learning_rate": lr_scheduler.get_last_lr()[0],
                     "train/avg_token_entropy": avg_entropy.item(),
+                    "train/consumed_tokens": consumed_tokens,
                     "train_step": global_step,
                 }
                 
@@ -370,6 +376,7 @@ def train(cfg: ScriptArguments):
                 progress_bar.set_postfix({
                     "loss": f"{loss.item() * cfg.training.gradient_accumulation_steps:.4f}",
                     "lr": f"{lr_scheduler.get_last_lr()[0]:.2e}",
+                    "tokens": f"{consumed_tokens/1e6:.2f}M",
                 })
                 
                 # Evaluation
