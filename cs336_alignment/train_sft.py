@@ -20,6 +20,7 @@ Usage:
     python train_sft.py logging.use_wandb=true logging.wandb_run_name=my_experiment
 """
 
+import time
 import logging
 import random
 from pathlib import Path
@@ -29,7 +30,7 @@ import wandb
 import hydra
 import torch
 from datasets import load_dataset
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
@@ -299,6 +300,7 @@ def train(cfg: ScriptArguments):
     eval_step = 0
     best_accuracy = 0.0
     consumed_tokens = 0  # Track total tokens consumed during training
+    start_time = None  # Track start time for tokens/sec calculation
     
     logger.info("Starting training...")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -317,6 +319,10 @@ def train(cfg: ScriptArguments):
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}")
         
         for step, batch in enumerate(progress_bar):
+            # Start timing on first step
+            if start_time is None:
+                start_time = time.time()
+            
             # Move batch to device
             input_ids = batch["input_ids"].to(model.device)
             labels = batch["labels"].to(model.device)
@@ -349,8 +355,8 @@ def train(cfg: ScriptArguments):
             
             # Gradient accumulation
             if (step + 1) % cfg.training.gradient_accumulation_steps == 0:
-                # Clip gradients
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.training.max_grad_norm)
+                # Clip gradients and get gradient norm
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.training.max_grad_norm)
                 
                 # Update weights
                 optimizer.step()
@@ -358,6 +364,10 @@ def train(cfg: ScriptArguments):
                 optimizer.zero_grad()
                 
                 global_step += 1
+                
+                # Calculate tokens per second
+                elapsed_time = time.time() - start_time
+                tokens_per_sec = consumed_tokens / elapsed_time if elapsed_time > 0 else 0
                 
                 # Log training metrics
                 avg_entropy = (token_entropy * response_mask).sum() / response_mask.sum()
@@ -367,6 +377,8 @@ def train(cfg: ScriptArguments):
                     "train/learning_rate": lr_scheduler.get_last_lr()[0],
                     "train/avg_token_entropy": avg_entropy.item(),
                     "train/consumed_tokens": consumed_tokens,
+                    "train/grad_norm": grad_norm.item(),
+                    "train/tokens_per_sec": tokens_per_sec,
                     "train_step": global_step,
                 }
                 
@@ -377,6 +389,8 @@ def train(cfg: ScriptArguments):
                     "loss": f"{loss.item() * cfg.training.gradient_accumulation_steps:.4f}",
                     "lr": f"{lr_scheduler.get_last_lr()[0]:.2e}",
                     "tokens": f"{consumed_tokens/1e6:.2f}M",
+                    "tok/s": f"{tokens_per_sec:.0f}",
+                    "grad": f"{grad_norm.item():.2f}",
                 })
                 
                 # Evaluation
