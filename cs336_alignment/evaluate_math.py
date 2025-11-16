@@ -115,7 +115,7 @@ def evaluate_and_save_results(
         total=len(responses),
         desc="Evaluating"
     ):
-        metrics = reward_fn(response, ground_truth)
+        metrics = reward_fn(response, ground_truth, False)
         all_metrics.append(metrics)
         
         result = {
@@ -183,22 +183,29 @@ def run_vllm_evaluation(cfg: ScriptArguments, dataset: Dataset):
         trust_remote_code=True,
     )
     
-    # Convert generation config to dict for SamplingParams
-    gen_dict = OmegaConf.to_container(cfg.generation, resolve=True)
-    sampling_params = SamplingParams(**gen_dict)
-    
-    prompts = dataset["prompt"]
-    logger.info(f"Generating responses for {len(prompts)} prompts with vLLM...")
-    outputs = llm.generate(prompts, sampling_params)
-    responses = [output.outputs[0].text for output in outputs]
-    
-    evaluate_and_save_results(
-        prompts=prompts,
-        responses=responses,
-        ground_truths=dataset["ground_truth"],
-        reward_fn=r1_zero_reward_fn,
-        output_dir=cfg.output_dir,
-    )
+    try:
+        # Convert generation config to dict for SamplingParams
+        gen_dict = OmegaConf.to_container(cfg.generation, resolve=True)
+        sampling_params = SamplingParams(**gen_dict)
+        
+        prompts = dataset["prompt"]
+        logger.info(f"Generating responses for {len(prompts)} prompts with vLLM...")
+        outputs = llm.generate(prompts, sampling_params)
+        responses = [output.outputs[0].text for output in outputs]
+        
+        evaluate_and_save_results(
+            prompts=prompts,
+            responses=responses,
+            ground_truths=dataset["ground_truth"],
+            reward_fn=r1_zero_reward_fn,
+            output_dir=cfg.output_dir,
+        )
+    finally:
+        # Explicitly delete the LLM object and clear GPU cache
+        del llm
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info("vLLM resources cleaned up")
 
 
 def run_hf_evaluation(cfg: ScriptArguments, dataset: Dataset):
