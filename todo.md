@@ -3,7 +3,9 @@
 事情有点多，先写一下来捋清自己的思路
 
 - [better train]目前的显存占用还是太大了，之后打算用accelerate来加速一下，这样同时也满足了多卡多节点的训练要求
-- [code refactor]打算把 train_sft 中 log generation 的那部分代码先稍微去掉，目前发现好像不太兼容；第二，想加一下训练的tokens数目的统计随着训练的变化；还有也可以考虑加一下 grad_norm/tokens_per_sec 的打印；
+- [eval refactor]打算把 validation 部分可以依次评测多个数据集的功能加上去，目前是只能评测一个数据集
+- 觉得还是得先好好理解一下 verifier 的实现再做 eval 部分
+- 打算把 train_sft 中 log generation 的那部分代码先稍微去掉，目前发现好像不太兼容；第二，想加一下训练的tokens数目的统计随着训练的变化；还有也可以考虑加一下 grad_norm/tokens_per_sec 的打印；
 - 打算将 rope_theta 和 max_position_embeddings 修改回原来的，去参考了 [smollm3](https://hugging-face.cn/blog/smollm3) 的 blog 中的做法，发现 4096 已经相当于 8页的数据了，打算专门先针对 4096 以内的长度来做 sft，之后再考虑更长的上下文，觉得目前要做更长的上下文的训练的话基于现在没有分布式的框架肯定是效率极低的；【避免闭门造车，量力而行】
 - 目前数据集的处理还没有好好看数据集是如何处理的，主要是各种长度导致自己现在的利用率很低，而且可以看到目前很多回答对的长度基本都是小于2048的，打算挑选一波短数据来sft，具体而言打算参考一下 smolm3 的做法，记得他有个脚本是专门讲长文训练的，觉得目前阶段还是打算挑两波数据，挑一个是回复长度小于4096的版本和小于2048的版本；
 - 目前测试了 gradient_checkpointing, flash_attention_2 对 最大 batch_size 的影响；
