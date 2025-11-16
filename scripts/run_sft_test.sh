@@ -10,4 +10,6 @@ export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 # uv run cs336_alignment/train_sft.py
-uv run cs336_alignment/train_sft.py --config-name exp_sft_fa2_omr12k
+# uv run cs336_alignment/train_sft.py --config-name exp_sft_fa2_omr12k
+uv run cs336_alignment/train_sft.py --config-name exp_sft_omr4096_12k
+uv run cs336_alignment/train_sft.py --config-name exp_sft_omr2048_12k

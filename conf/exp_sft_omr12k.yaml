@@ -1,0 +1,27 @@
+defaults:
+  - sft_config
+
+model:
+  attn_implementation: flash_attention_2
+
+data:
+  train_data_path: data/OMR12k-formated/train.jsonl
+  val_data_path: data/OMR12k-formated/validation.jsonl
+
+training:
+  output_dir: ckpt/exp_sft_omr_12k
+  batch_size: 2
+  gradient_accumulation_steps: 8
+
+evaluation:
+  eval_steps: 50
+  save_steps: 100
+  generation_max_tokens: 32768
+
+logging:
+  use_wandb: true
+  wandb_project: cs336-assignment5-alignment
+  wandb_run_name: exp_sft_omr_12k
+
+# should edit the config.json first to set the max_position_embeddings to 32768 and rope_theta to 160000
+# uv run cs336_alignment/train_sft.py --config-name exp_sft_omr_12k

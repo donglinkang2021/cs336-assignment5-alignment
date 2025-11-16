@@ -1,0 +1,26 @@
+defaults:
+  - sft_config
+
+model:
+  attn_implementation: flash_attention_2
+
+data:
+  train_data_path: data/OMR12k-4096/train.jsonl
+  val_data_path: data/OMR12k-4096/validation.jsonl
+
+training:
+  output_dir: ckpt/exp_sft_omr4096_12k
+  batch_size: 8
+  gradient_accumulation_steps: 4
+
+evaluation:
+  eval_steps: 10
+  save_steps: 50
+  generation_max_tokens: 4096
+
+logging:
+  use_wandb: true
+  wandb_project: cs336-assignment5-alignment
+  wandb_run_name: exp_sft_omr4096_12k
+
+# uv run cs336_alignment/train_sft.py --config-name exp_sft_omr4096_12k
