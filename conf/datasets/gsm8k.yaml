@@ -1,7 +1,5 @@
 # GSM8K Benchmark Configuration
 gsm8k:
-  type: "local"
-  data_path: "data/gsm8k/test.jsonl"
-  dataset_name: null
-  dataset_split: null
-  num_samples: null
+  path: "json"
+  data_files: "data/gsm8k/test.jsonl"
+  split: "train"

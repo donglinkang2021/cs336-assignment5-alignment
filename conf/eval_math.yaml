@@ -38,9 +38,8 @@ generation:
   # HF specific generation args can be added here
   # e.g., do_sample: true
 
-# vLLM specific settings
-vllm:
-  num_gpus: 1
+num_gpus: 1
+num_samples: null
 
 # Output directory for results
 output_dir: "outputs/math_evaluation"

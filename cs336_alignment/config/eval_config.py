@@ -9,11 +9,11 @@ class ModelConfig:
 
 @dataclass
 class DatasetConfig:
-    type: str
-    data_path: Optional[str] = None
-    dataset_name: Optional[str] = None
-    dataset_split: Optional[str] = None
-    num_samples: Optional[int] = None
+    """Just the arguments of the datasets.load_dataset"""
+    path: str
+    name: Optional[str] = None
+    data_files: Optional[str] = None
+    split: Optional[str] = None
 
 @dataclass
 class GenerationConfig:
@@ -24,16 +24,13 @@ class GenerationConfig:
     include_stop_str_in_output: bool = True
 
 @dataclass
-class VLLMConfig:
-    num_gpus: int = 1
-
-@dataclass
 class ScriptArguments:
     backend: str
     model: ModelConfig
     datasets: List[DatasetConfig]
     prompt_name: str
     generation: GenerationConfig
-    vllm: VLLMConfig
     output_dir: str
     seed: int
+    num_gpus: int = 1
+    num_samples: Optional[int] = None

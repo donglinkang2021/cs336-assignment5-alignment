@@ -1,7 +1,5 @@
 # Competition MATH Benchmark Configuration
 competition_math:
-  type: "local"
-  data_path: "data/Math/validation.jsonl"
-  dataset_name: null
-  dataset_split: null
-  num_samples: null
+  path: "json"
+  data_files: "data/Math/validation.jsonl"
+  split: "train"

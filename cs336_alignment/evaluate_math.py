@@ -15,7 +15,6 @@ import json
 import logging
 import random
 import sys
-import gc
 from pathlib import Path
 from statistics import mean
 from typing import Callable, Dict, List
@@ -29,7 +28,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from xopen import xopen
 
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
-from cs336_alignment.config.eval_config import ScriptArguments, DatasetConfig
+from cs336_alignment.config.eval_config import ScriptArguments
 from cs336_alignment.utils import load_prompt_template
 
 # Conditional import for vLLM
@@ -41,33 +40,12 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-
-def load_dataset_flexible(cfg: DatasetConfig) -> Dataset:
-    """
-    Load dataset from either local file or HuggingFace Hub based on config.
-    """
-    if cfg.type == "local":
-        if cfg.data_path is None:
-            raise ValueError("data_path must be provided when dataset.type='local'")
-        logger.info(f"Loading examples from local file: {cfg.data_path}...")
-        dataset = load_dataset('json', data_files=cfg.data_path, split='train')
-    elif cfg.type == "huggingface":
-        if cfg.dataset_name is None or cfg.dataset_split is None:
-            raise ValueError(
-                "dataset_name and dataset_split must be provided for huggingface dataset"
-            )
-        logger.info(f"Loading from HuggingFace: {cfg.dataset_name}, split={cfg.dataset_split}...")
-        dataset = load_dataset(cfg.dataset_name, split=cfg.dataset_split)
-    else:
-        raise ValueError(f"Invalid dataset type: {cfg.type}. Must be 'local' or 'huggingface'")
-    
-    logger.info(f"Loaded {len(dataset)} examples")
-    if cfg.get("num_samples"):
-        num_samples = min(cfg.num_samples, len(dataset))
+def sample_dataset(dataset: Dataset, num_samples:int=None) -> Dataset:
+    if num_samples:
+        num_samples = min(num_samples, len(dataset))
         logger.info(f"Sampling {num_samples} examples from the dataset.")
         indices = random.sample(range(len(dataset)), num_samples)
         dataset = dataset.select(indices)
-
     return dataset
 
 
@@ -168,7 +146,7 @@ def run_vllm_evaluation(cfg: ScriptArguments, datasets: Dict[str, Dataset]):
     llm = LLM(
         model=cfg.model.model_name_or_path,
         dtype=cfg.model.dtype,
-        tensor_parallel_size=cfg.vllm.num_gpus,
+        tensor_parallel_size=cfg.num_gpus,
         trust_remote_code=True,
     )
     
@@ -292,12 +270,12 @@ def main(cfg: ScriptArguments):
     datasets = {}
     for dataset_name, dataset_cfg in cfg.datasets.items():
         logger.info(f"Processing dataset: {dataset_name}")
-        dataset = load_dataset_flexible(dataset_cfg)
+        dataset = load_dataset(**dataset_cfg)
         dataset = dataset.map(
             lambda sample: process_math_example(sample, prompt_template),
             desc="Formatting prompts"
         )
-        datasets[dataset_name] = dataset
+        datasets[dataset_name] = sample_dataset(dataset, cfg.num_samples)
         
     logger.info("First processed example:")
     for key, value in datasets.items():
