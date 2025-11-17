@@ -3,7 +3,8 @@
 事情有点多，先写一下来捋清自己的思路
 
 - [better train]目前的显存占用还是太大了，之后打算用accelerate来加速一下，这样同时也满足了多卡多节点的训练要求
-- [eval refactor]打算把 validation 部分可以依次评测多个数据集的功能加上去，目前是只能评测一个数据集
+- [visualize eval]打算将模型评测效果绘制出来，觉得在起步阶段就 build 好自己的 benchmark 才不会往错误的方向去优化代码
+- 打算把 validation 部分可以依次评测多个数据集的功能加上去，目前是只能评测一个数据集
 - 觉得还是得先好好理解一下 verifier 的实现再做 eval 部分
 - 打算把 train_sft 中 log generation 的那部分代码先稍微去掉，目前发现好像不太兼容；第二，想加一下训练的tokens数目的统计随着训练的变化；还有也可以考虑加一下 grad_norm/tokens_per_sec 的打印；
 - 打算将 rope_theta 和 max_position_embeddings 修改回原来的，去参考了 [smollm3](https://hugging-face.cn/blog/smollm3) 的 blog 中的做法，发现 4096 已经相当于 8页的数据了，打算专门先针对 4096 以内的长度来做 sft，之后再考虑更长的上下文，觉得目前要做更长的上下文的训练的话基于现在没有分布式的框架肯定是效率极低的；【避免闭门造车，量力而行】

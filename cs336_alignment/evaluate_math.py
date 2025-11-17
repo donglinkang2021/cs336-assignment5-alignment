@@ -108,6 +108,7 @@ def evaluate_and_save_results(
     category_1 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 1.0)
     category_2 = sum(1 for m in all_metrics if m["format_reward"] == 1.0 and m["answer_reward"] == 0.0)
     category_3 = sum(1 for m in all_metrics if m["format_reward"] == 0.0 and m["answer_reward"] == 0.0)
+    category_4 = sum(1 for m in all_metrics if m["format_reward"] == 0.0 and m["answer_reward"] == 1.0)
     
     summary = {
         "total_examples": total,
@@ -116,6 +117,7 @@ def evaluate_and_save_results(
             "category_1_format1_answer1": {"count": category_1, "percentage": category_1 / total * 100 if total > 0 else 0},
             "category_2_format1_answer0": {"count": category_2, "percentage": category_2 / total * 100 if total > 0 else 0},
             "category_3_format0_answer0": {"count": category_3, "percentage": category_3 / total * 100 if total > 0 else 0},
+            "category_4_format0_answer1": {"count": category_4, "percentage": category_4 / total * 100 if total > 0 else 0},
         }
     }
     
@@ -133,7 +135,8 @@ def evaluate_and_save_results(
     logger.info("Category Breakdown:")
     logger.info(f"  Correct (Format & Answer): {category_1} ({summary['category_breakdown']['category_1_format1_answer1']['percentage']:.2f}%)")
     logger.info(f"  Correct Format, Wrong Answer: {category_2} ({summary['category_breakdown']['category_2_format1_answer0']['percentage']:.2f}%)")
-    logger.info(f"  Wrong Format: {category_3} ({summary['category_breakdown']['category_3_format0_answer0']['percentage']:.2f}%)")
+    logger.info(f"  Wrong Format, Wrong Answer: {category_3} ({summary['category_breakdown']['category_3_format0_answer0']['percentage']:.2f}%)")
+    logger.info(f"  Wrong Format, Correct Answer: {category_4} ({summary['category_breakdown']['category_4_format0_answer1']['percentage']:.2f}%)")
     logger.info("=" * 80)
 
 

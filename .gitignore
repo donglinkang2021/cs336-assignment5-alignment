@@ -169,5 +169,5 @@ cython_debug/
 #.idea/
 
 wandb/
-eval_results
+eval_results*
 staging

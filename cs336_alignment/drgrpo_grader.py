@@ -1004,47 +1004,44 @@ def grade(model_answer: str, gt_answer: str, fast: bool = True):
         )
     return correct
 
-
+# a little bit different from the orginal reward_fn
+# more focus on the answer_reward rather than the format reward
+# will return 4 class reward 00 01 10 11
 def r1_zero_reward_fn(response, ground_truth, fast=True):
+    format_reward = 0.0
+    answer_reward = 0.0
     # We are strict about format to evaluate our models.
-    if "</think>\n<answer>" in response and "</answer>" in response:
+    format_flag = "</think>\n<answer>" in response or "</think> <answer>" in response
+    if format_flag and "</answer>" in response:
+        format_reward = 1.0
         model_answer = response.split("<answer>")[-1].replace("</answer>", "")
-        if "\\boxed" in model_answer:
-            model_answer = extract_answer(model_answer)
-            if model_answer is None:
-                return {
-                    "format_reward": 1.0,
-                    "answer_reward": 0.0,
-                    "reward": 0.0
-                }
-        if isinstance(ground_truth, float) or isinstance(ground_truth, int):
-            ground_truth = str(ground_truth)
-        if isinstance(ground_truth, str):
-            is_correct = grade(model_answer, ground_truth, fast)
-        elif isinstance(ground_truth, list):
-            is_correct = False
-            for gt in ground_truth:
-                is_correct |= grade(model_answer, gt, fast)
-        if is_correct:
+    else:
+        model_answer = response
+
+    if "\\boxed" in model_answer:
+        model_answer = extract_answer(model_answer)
+        if model_answer is None:
             return {
-                "format_reward": 1.0,
-                "answer_reward": 1.0,
-                "reward": 1.0
-            }
-        else:
-            # Formatted but wrong answer; no format reward to avoid hacking.
-            return {
-                "format_reward": 1.0,
+                "format_reward": format_reward,
                 "answer_reward": 0.0,
                 "reward": 0.0
             }
-    else:
-        # Unformatted.
-        return {
-            "format_reward": 0.0,
-            "answer_reward": 0.0,
-            "reward": 0.0
-        }
+    if isinstance(ground_truth, float) or isinstance(ground_truth, int):
+        ground_truth = str(ground_truth)
+    if isinstance(ground_truth, str):
+        is_correct = grade(model_answer, ground_truth, fast)
+    elif isinstance(ground_truth, list):
+        is_correct = False
+        for gt in ground_truth:
+            is_correct |= grade(model_answer, gt, fast)
+    if is_correct:
+        answer_reward = 1.0
+
+    return {
+        "format_reward": format_reward,
+        "answer_reward": answer_reward,
+        "reward": format_reward * answer_reward,
+    }
 
 
 def question_only_reward_fn(response, ground_truth, fast=True):
