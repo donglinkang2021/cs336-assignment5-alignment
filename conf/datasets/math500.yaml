@@ -1,0 +1,7 @@
+# MATH-500 Benchmark Configuration
+math500:
+  type: "huggingface"
+  data_path: null
+  dataset_name: "HuggingFaceH4/MATH-500"
+  dataset_split: "test"
+  num_samples: null

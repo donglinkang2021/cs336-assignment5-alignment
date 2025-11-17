@@ -19,7 +19,7 @@ class DatasetConfig:
 class GenerationConfig:
     temperature: float = 1.0
     top_p: float = 1.0
-    max_tokens: int = 32768
+    max_tokens: int = 4096
     stop: List[str] = field(default_factory=lambda: ["</answer>"])
     include_stop_str_in_output: bool = True
 
@@ -31,7 +31,7 @@ class VLLMConfig:
 class ScriptArguments:
     backend: str
     model: ModelConfig
-    dataset: DatasetConfig
+    datasets: List[DatasetConfig]
     prompt_name: str
     generation: GenerationConfig
     vllm: VLLMConfig

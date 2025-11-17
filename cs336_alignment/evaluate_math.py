@@ -8,18 +8,6 @@ This script:
 4. Evaluates using a reward function (e.g., Dr. GRPO's).
 5. Saves detailed and summary results to disk.
 6. Uses Hydra for configuration management.
-
-Usage:
-
-# Run with vLLM backend
-python eval/evaluate_math.py backend=vllm \
-    model.model_name_or_path=models/Qwen2.5-Math-1.5B \
-    dataset.data_path=data/Math/validation.jsonl
-
-# Run with Hugging Face backend
-python eval/evaluate_math.py backend=hf \
-    model.model_name_or_path=outputs/sft_omr12k/best_model \
-    dataset.data_path=data/OMR12k/validation.jsonl
 """
 
 import re
@@ -27,6 +15,7 @@ import json
 import logging
 import random
 import sys
+import gc
 from pathlib import Path
 from statistics import mean
 from typing import Callable, Dict, List
@@ -170,7 +159,7 @@ def evaluate_and_save_results(
     logger.info("=" * 80)
 
 
-def run_vllm_evaluation(cfg: ScriptArguments, dataset: Dataset):
+def run_vllm_evaluation(cfg: ScriptArguments, datasets: Dict[str, Dataset]):
     """Run evaluation using the vLLM backend."""
     if not VLLM_AVAILABLE:
         raise ImportError("vLLM is not installed. Please install it to use the 'vllm' backend.")
@@ -183,7 +172,8 @@ def run_vllm_evaluation(cfg: ScriptArguments, dataset: Dataset):
         trust_remote_code=True,
     )
     
-    try:
+    for dataset_name, dataset in datasets.items():
+        logger.info(f"Evaluating dataset: {dataset_name} with {len(dataset)} examples...")
         # Convert generation config to dict for SamplingParams
         gen_dict = OmegaConf.to_container(cfg.generation, resolve=True)
         sampling_params = SamplingParams(**gen_dict)
@@ -198,17 +188,11 @@ def run_vllm_evaluation(cfg: ScriptArguments, dataset: Dataset):
             responses=responses,
             ground_truths=dataset["ground_truth"],
             reward_fn=r1_zero_reward_fn,
-            output_dir=cfg.output_dir,
+            output_dir=f"{cfg.output_dir}/{dataset_name}",
         )
-    finally:
-        # Explicitly delete the LLM object and clear GPU cache
-        del llm
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        logger.info("vLLM resources cleaned up")
 
 
-def run_hf_evaluation(cfg: ScriptArguments, dataset: Dataset):
+def run_hf_evaluation(cfg: ScriptArguments, datasets: Dict[str, Dataset]):
     """Run evaluation using the Hugging Face Transformers backend."""
     logger.info(f"Loading model with Transformers from {cfg.model.model_name_or_path}...")
     tokenizer = AutoTokenizer.from_pretrained(cfg.model.model_name_or_path)
@@ -223,71 +207,78 @@ def run_hf_evaluation(cfg: ScriptArguments, dataset: Dataset):
         
     model.eval()
 
-    prompts = [prompt for prompt in dataset["prompt"]]
-    
-    # Convert generation config to dict for generate()
-    generation_kwargs = {
-        'max_new_tokens': cfg.generation.max_tokens,
-        'do_sample': True,
-        "pad_token_id": tokenizer.pad_token_id,
-        "bos_token_id": tokenizer.bos_token_id,
-        "eos_token_id": tokenizer.eos_token_id,
-        'temperature': cfg.generation.temperature,
-        'top_p': cfg.generation.top_p,
-    }
-    generation_config = GenerationConfig(**generation_kwargs)
+    for dataset_name, dataset in datasets.items():
+        logger.info(f"Evaluating dataset: {dataset_name} with {len(dataset)} examples...")
 
-    logger.info(f"Generating responses for {len(prompts)} prompts with HF Transformers...")
+        prompts = [prompt for prompt in dataset["prompt"]]
+        
+        # Convert generation config to dict for generate()
+        generation_kwargs = {
+            'max_new_tokens': cfg.generation.max_tokens,
+            'do_sample': True,
+            "pad_token_id": tokenizer.pad_token_id,
+            "bos_token_id": tokenizer.bos_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+            'temperature': cfg.generation.temperature,
+            'top_p': cfg.generation.top_p,
+        }
+        generation_config = GenerationConfig(**generation_kwargs)
 
-    # Batch generation
-    batch_size = 1
-    all_prompts_text = []
-    all_completions_text = []
-    
-    for i in tqdm(range(0, len(prompts), batch_size), desc="Generating batches"):
-        batch_prompts = prompts[i:i + batch_size]
+        logger.info(f"Generating responses for {len(prompts)} prompts with HF Transformers...")
+
+        # Batch generation
+        batch_size = 1
+        all_prompts_text = []
+        all_completions_text = []
         
-        prompt_inputs = tokenizer(
-            batch_prompts, return_tensors="pt",
-            padding=True, padding_side="left",
-            add_special_tokens=True,
-        ).to(model.device)
-        
-        with torch.no_grad():
-            prompt_completion_ids = model.generate(
-                **prompt_inputs,
-                generation_config=generation_config,
+        for i in tqdm(range(0, len(prompts), batch_size), desc="Generating batches"):
+            batch_prompts = prompts[i:i + batch_size]
+            
+            prompt_inputs = tokenizer(
+                batch_prompts, return_tensors="pt",
+                padding=True, padding_side="left",
+                add_special_tokens=True,
+            ).to(model.device)
+            
+            with torch.no_grad():
+                prompt_completion_ids = model.generate(
+                    **prompt_inputs,
+                    generation_config=generation_config,
+                )
+            
+            prompt_length = prompt_inputs['input_ids'].size(1)
+            prompt_ids = prompt_completion_ids[:, :prompt_length]
+            completion_ids = prompt_completion_ids[:, prompt_length:]
+            
+            batch_prompts_text = tokenizer.batch_decode(
+                prompt_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False
             )
-        
-        prompt_length = prompt_inputs['input_ids'].size(1)
-        prompt_ids = prompt_completion_ids[:, :prompt_length]
-        completion_ids = prompt_completion_ids[:, prompt_length:]
-        
-        batch_prompts_text = tokenizer.batch_decode(
-            prompt_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False
-        )
-        batch_prompts_text = [
-            re.sub(rf"^({re.escape(tokenizer.pad_token)})+", "", text) for text in batch_prompts_text
-        ]
-        
-        batch_completions_text = tokenizer.batch_decode(
-            completion_ids, skip_special_tokens=True
-        )
-        
-        all_prompts_text.extend(batch_prompts_text)
-        all_completions_text.extend(batch_completions_text)
+            batch_prompts_text = [
+                re.sub(rf"^({re.escape(tokenizer.pad_token)})+", "", text) for text in batch_prompts_text
+            ]
+            
+            batch_completions_text = tokenizer.batch_decode(
+                completion_ids, skip_special_tokens=True
+            )
+            
+            all_prompts_text.extend(batch_prompts_text)
+            all_completions_text.extend(batch_completions_text)
 
-    evaluate_and_save_results(
-        prompts=all_prompts_text,
-        responses=all_completions_text,
-        ground_truths=dataset["ground_truth"],
-        reward_fn=r1_zero_reward_fn,
-        output_dir=cfg.output_dir,
-    )
+        evaluate_and_save_results(
+            prompts=all_prompts_text,
+            responses=all_completions_text,
+            ground_truths=dataset["ground_truth"],
+            reward_fn=r1_zero_reward_fn,
+            output_dir=f"{cfg.output_dir}/{dataset_name}",
+        )
 
 
 @hydra.main(config_path="../conf", config_name="eval_math", version_base=None)
 def main(cfg: ScriptArguments):
+    # Disable core dump generation to avoid creating core.* files
+    import resource
+    resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    
     # Set random seed for reproducibility
     random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
@@ -298,20 +289,24 @@ def main(cfg: ScriptArguments):
     
     prompt_template = load_prompt_template(cfg.prompt_name)
     
-    dataset = load_dataset_flexible(cfg.dataset)
-    
-    dataset = dataset.map(
-        lambda sample: process_math_example(sample, prompt_template),
-        desc="Formatting prompts"
-    )
-    
+    datasets = {}
+    for dataset_name, dataset_cfg in cfg.datasets.items():
+        logger.info(f"Processing dataset: {dataset_name}")
+        dataset = load_dataset_flexible(dataset_cfg)
+        dataset = dataset.map(
+            lambda sample: process_math_example(sample, prompt_template),
+            desc="Formatting prompts"
+        )
+        datasets[dataset_name] = dataset
+        
     logger.info("First processed example:")
-    logger.info(json.dumps(dataset[0], indent=2))
+    for key, value in datasets.items():
+        logger.info(f"Dataset: {key}, Number of examples: {len(value)}")
     
     if cfg.backend == "vllm":
-        run_vllm_evaluation(cfg, dataset)
+        run_vllm_evaluation(cfg, datasets)
     elif cfg.backend == "hf":
-        run_hf_evaluation(cfg, dataset)
+        run_hf_evaluation(cfg, datasets)
     else:
         raise ValueError(f"Invalid backend: {cfg.backend}. Must be 'vllm' or 'hf'.")
         
