@@ -7,7 +7,7 @@
 </div>
 
 
-- [visualize_results.py](../scripts/visualize_results.py) 将 [eval_t_topp.sh](../scripts/eval_t_topp.sh) 和 [eval_t_topp1.sh](../scripts/eval_t_topp1.sh) 的结果可视化出来，结果如上图所示；
+- [visualize_results.py](../scripts/visualize_results.py) 将 [eval_t_topp.sh](#eval_t_toppsh) 和 [eval_t_topp1.sh](#eval_t_topp1sh) 的结果可视化出来，结果如上图所示；
 - [print_results_table.py](../scripts/print_results_table.py) 直接将结果文件的 summary.json 中的 aggregate_metrics 打印出来，如下表所示
 
 结论：
@@ -76,3 +76,120 @@
 | Qwen2.5-Math-1.5B-temperature0.6-topp1.0           |              0.424 | 0.544352   |     0.392 |
 | Qwen2.5-Math-1.5B-temperature1.0-topp0.95          |              0.312 | 0.334344   |     0.27  |
 | Qwen2.5-Math-1.5B-temperature1.0-topp1.0           |              0.21  | 0.278999   |     0.214 |
+
+
+### eval_t_topp.sh
+
+```bash
+#!/bin/bash
+# Add error handling
+set -e  # Exit immediately on error
+set -u  # Error on unset variables
+set -o pipefail  # Fail a pipeline if any command fails
+
+export HF_HUB_OFFLINE=1
+export CUDA_VISIBLE_DEVICES=3
+
+# Use more descriptive variable names and add read-only protection
+readonly MODEL_PATH="Qwen/Qwen2.5-Math-1.5B"
+
+# Define temperature and top_p combinations to test
+# Format: "temperature:top_p"
+COMBINATIONS=(
+    "0.0:1.0"
+    "0.6:0.95"
+    "0.6:1.0"
+    "1.0:0.95"
+    "1.0:1.0"
+)
+
+echo "Starting grid search evaluation..."
+echo "Total combinations to test: ${#COMBINATIONS[@]}"
+echo "-------------------------------------------"
+
+# Loop through each combination
+for combo in "${COMBINATIONS[@]}"; do
+    # Split the combination into temperature and top_p
+    IFS=':' read -r temp topp <<< "$combo"
+    
+    SAVE_PATH="Qwen/Qwen2.5-Math-1.5B-temperature${temp}-topp${topp}"
+    
+    echo ""
+    echo "==================================================="
+    echo "Testing: temperature=${temp}, top_p=${topp}"
+    echo "==================================================="
+    
+    # Run evaluation
+    uv run cs336_alignment/evaluate_math.py \
+        model.model_name_or_path="$MODEL_PATH" \
+        generation.temperature="$temp" \
+        generation.top_p="$topp" \
+        datasets=[competition_math,gsm8k,math500] \
+        output_dir="eval_results1/${SAVE_PATH}/"
+    
+    echo "Completed: temperature=${temp}, top_p=${topp}"
+done
+
+echo ""
+echo "==================================================="
+echo "All evaluations completed successfully!"
+echo "==================================================="
+```
+
+### eval_t_topp1.sh
+
+```bash
+#!/bin/bash
+# Add error handling
+set -e  # Exit immediately on error
+set -u  # Error on unset variables
+set -o pipefail  # Fail a pipeline if any command fails
+
+export HF_HUB_OFFLINE=1
+export CUDA_VISIBLE_DEVICES=2
+
+# Use more descriptive variable names and add read-only protection
+readonly MODEL_PATH="Qwen/Qwen2.5-Math-1.5B-Instruct"
+
+# Define temperature and top_p combinations to test
+# Format: "temperature:top_p"
+COMBINATIONS=(
+    "0.0:1.0"
+    "0.6:0.95"
+    "0.6:1.0"
+    "1.0:0.95"
+    "1.0:1.0"
+)
+
+echo "Starting grid search evaluation..."
+echo "Total combinations to test: ${#COMBINATIONS[@]}"
+echo "-------------------------------------------"
+
+# Loop through each combination
+for combo in "${COMBINATIONS[@]}"; do
+    # Split the combination into temperature and top_p
+    IFS=':' read -r temp topp <<< "$combo"
+    
+    SAVE_PATH="Qwen/Qwen2.5-Math-1.5B-Instruct-temperature${temp}-topp${topp}"
+    
+    echo ""
+    echo "==================================================="
+    echo "Testing: temperature=${temp}, top_p=${topp}"
+    echo "==================================================="
+    
+    # Run evaluation
+    uv run cs336_alignment/evaluate_math.py \
+        model.model_name_or_path="$MODEL_PATH" \
+        generation.temperature="$temp" \
+        generation.top_p="$topp" \
+        datasets=[competition_math,gsm8k,math500] \
+        output_dir="eval_results1/${SAVE_PATH}/"
+    
+    echo "Completed: temperature=${temp}, top_p=${topp}"
+done
+
+echo ""
+echo "==================================================="
+echo "All evaluations completed successfully!"
+echo "==================================================="
+```
