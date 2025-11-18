@@ -2,8 +2,10 @@
 
 <div align="center">
     <img src="../images/base_vs_instruct_comparison.png" width=800>
+    </br>
     <caption>测试了五组 Temperature/Top-p 在 Qwen2.5-Math-1.5B 及 Qwen2.5-Math-1.5B-Instruct 上的表现 </caption>
 </div>
+
 
 - [visualize_results.py](../scripts/visualize_results.py) 将 [eval_t_topp.sh](../scripts/eval_t_topp.sh) 和 [eval_t_topp1.sh](../scripts/eval_t_topp1.sh) 的结果可视化出来，结果如上图所示；
 - [print_results_table.py](../scripts/print_results_table.py) 直接将结果文件的 summary.json 中的 aggregate_metrics 打印出来，如下表所示
