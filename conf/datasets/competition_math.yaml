@@ -1,5 +1,0 @@
-# Competition MATH Benchmark Configuration
-competition_math:
-  path: "json"
-  data_files: "data/Math/validation.jsonl"
-  split: "train"

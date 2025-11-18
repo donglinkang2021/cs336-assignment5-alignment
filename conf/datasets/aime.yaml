@@ -1,0 +1,5 @@
+# AIME All Years Benchmark Configuration
+aime:
+  path: "json"
+  data_files: "data/eval/aime/test.jsonl"
+  split: "train"

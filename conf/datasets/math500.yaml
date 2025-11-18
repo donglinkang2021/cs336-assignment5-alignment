@@ -1,4 +1,5 @@
 # MATH-500 Benchmark Configuration
 math500:
-  path: "HuggingFaceH4/MATH-500"
-  split: "test"
+  path: "json"
+  data_files: "data/eval/math500/test.jsonl"
+  split: "train"

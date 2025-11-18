@@ -1,0 +1,5 @@
+# AIME 2025 Benchmark Configuration
+aime25:
+  path: "json"
+  data_files: "data/eval/aime25/test.jsonl"
+  split: "train"

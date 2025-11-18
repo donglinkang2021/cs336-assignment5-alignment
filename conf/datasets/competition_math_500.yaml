@@ -1,0 +1,5 @@
+# Competition MATH Benchmark Configuration
+competition_math_500:
+  path: "json"
+  data_files: "data/eval/competition_math_500/test.jsonl"
+  split: "train"

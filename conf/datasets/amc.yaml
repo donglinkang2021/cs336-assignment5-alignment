@@ -1,0 +1,5 @@
+# AMC Benchmark Configuration
+amc:
+  path: "json"
+  data_files: "data/eval/amc/test.jsonl"
+  split: "train"

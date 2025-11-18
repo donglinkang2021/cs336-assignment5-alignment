@@ -1,5 +1,5 @@
 # GSM8K Benchmark Configuration
 gsm8k:
   path: "json"
-  data_files: "data/gsm8k/test.jsonl"
+  data_files: "data/eval/gsm8k/test.jsonl"
   split: "train"

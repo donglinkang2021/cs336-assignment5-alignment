@@ -1,0 +1,5 @@
+# AIME 2022 Benchmark Configuration
+aime22:
+  path: "json"
+  data_files: "data/eval/aime22/test.jsonl"
+  split: "train"
