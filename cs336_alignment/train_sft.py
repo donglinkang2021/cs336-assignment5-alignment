@@ -9,15 +9,6 @@ It includes:
 3. Training with periodic evaluation
 4. Logging to wandb
 5. Saving checkpoints
-
-Usage:
-    python train_sft.py
-    
-    # Override config values from command line
-    python train_sft.py training.num_epochs=5 training.batch_size=8
-    
-    # Use wandb
-    python train_sft.py logging.use_wandb=true logging.wandb_run_name=my_experiment
 """
 
 import time
@@ -29,9 +20,9 @@ from typing import Dict, List
 import wandb
 import hydra
 import torch
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from omegaconf import OmegaConf
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModelForCausalLM, get_scheduler
 from cs336_alignment.vllm_sync import VLLMClient
@@ -48,37 +39,36 @@ from cs336_alignment.utils import load_prompt_template
 
 logger = logging.getLogger(__name__)
 
-class SFTDataset(Dataset):
-    """Dataset for SFT training."""
-    
-    def __init__(self, data_path: str, prompt_template: str, num_examples: int = None):
-        """
-        Args:
-            data_path: Path to the jsonl file containing the data
-            prompt_template: Template for formatting prompts
-            num_examples: Maximum number of examples to use (None = use all)
-        """
-        logger.info(f"Loading SFT data from {data_path}...")
-        dataset = load_dataset('json', data_files=data_path, split='train')
-        
-        if num_examples is not None and num_examples < len(dataset):
-            # Sample num_examples randomly
-            indices = random.sample(range(len(dataset)), num_examples)
-            dataset = dataset.select(indices)
-        
-        self.dataset = dataset
-        self.prompt_template = prompt_template
-        logger.info(f"Loaded {len(self.dataset)} examples for SFT")
-    
-    def __len__(self):
-        return len(self.dataset)
-    
-    def __getitem__(self, idx):
-        prompt = self.prompt_template.format(question=self.dataset[idx].get("problem", ""))
-        response = self.dataset[idx].get("generated_solution", "").lstrip("<think>\n")
-        ground_truth = self.dataset[idx].get("expected_answer", "")
-        return { "prompt": prompt, "response": response, "ground_truth": ground_truth}
+def process_math_example(sample: Dict, prompt_template: str) -> Dict:
+    """
+    Process a single MATH example by formatting the prompt.
+    """
+    question = sample.get("problem", sample.get("question", ""))
+    response = sample.get("generated_solution", "").lstrip("<think>\n")
+    answer = sample.get("solution", sample.get("expected_answer", sample.get("answer", "")))
+    sample["prompt"] = prompt_template.format(question=question)
+    sample["response"]=response
+    sample["ground_truth"] = answer
+    return sample
 
+def sample_dataset(dataset: Dataset, num_samples:int=None) -> Dataset:
+    if num_samples is not None and num_samples < len(dataset):
+        num_samples = min(num_samples, len(dataset))
+        logger.info(f"Sampling {num_samples} examples from the dataset.")
+        indices = random.sample(range(len(dataset)), num_samples)
+        dataset = dataset.select(indices)
+    return dataset
+
+def get_dataset(dataset_cfg: dict, prompt_template: str, num_samples: int = None) -> Dataset:
+    logger.info(f"Loading data from {dataset_cfg.get("data_files", "")}...")
+    dataset = load_dataset(**dataset_cfg)
+    dataset = sample_dataset(dataset, num_samples)
+    dataset = dataset.map(
+        lambda sample: process_math_example(sample, prompt_template),
+        desc="Formatting prompts"
+    )
+    logger.info(f"Loaded {len(dataset)} examples.")
+    return dataset
 
 def collate_fn(batch: List[Dict], tokenizer):
     """Collate function for DataLoader."""
@@ -105,32 +95,18 @@ def mean(values: List[float]) -> float:
 def evaluate_model(
     vllm_client: VLLMClient,
     tokenizer: AutoTokenizer,
-    val_dataset: SFTDataset,
+    dataset: Dataset,
     generation_kwargs: dict,
-    max_examples: int = 100,
-) -> Dict:
-    """
-    Evaluate the model on validation set using VLLMClient.
-    """
-    # Sample a subset for evaluation
-    num_eval = min(max_examples, len(val_dataset))
-    eval_indices = random.sample(range(len(val_dataset)), num_eval)
-    
-    prompts = [val_dataset[i]['prompt'] for i in eval_indices]
-    ground_truths = [val_dataset[i]['ground_truth'] for i in eval_indices]
-    
-    logger.info(f"Generating responses for {len(prompts)} validation examples...")
-    
-    # Generate responses using VLLMClient
-    output = vllm_client.generate(prompts, n=1, generation_kwargs=generation_kwargs)
-    
-    # Extract generated texts
+    eval_n_times: int
+) -> Dict:    
+    logger.info(f"Generating responses for {len(dataset)} validation examples...")
+    output = vllm_client.generate(dataset["prompt"], n=eval_n_times, generation_kwargs=generation_kwargs)
     responses = tokenizer.batch_decode(output["completion_ids"], skip_special_tokens=True)
     
     # Evaluate responses and collect detailed metrics
     all_metrics = []
     
-    for idx, (prompt, response, ground_truth) in enumerate(zip(prompts, responses, ground_truths)):
+    for response, ground_truth in zip(responses, dataset["ground_truth"]):
         metrics = r1_zero_reward_fn(response, ground_truth)
         all_metrics.append(metrics)
     
@@ -140,8 +116,7 @@ def evaluate_model(
         aggregate_metrics[key] = mean([m[key] for m in all_metrics])
     
     # Calculate accuracy (correct answers)
-    accuracy = mean([m["answer_reward"] for m in all_metrics])
-    aggregate_metrics["accuracy"] = accuracy
+    aggregate_metrics["accuracy"] = aggregate_metrics["answer_reward"]
     
     # Calculate response length statistics
     response_lengths = [len(r) for r in responses]
@@ -154,25 +129,25 @@ def evaluate_model(
     
     return aggregate_metrics
 
-def log_eval_metrics(eval_metrics:Dict, cfg:ScriptArguments, eval_step:int):
-    if cfg.logging.use_wandb:
-        # Log evaluation metrics
+def log_eval_metrics(eval_metrics:Dict, use_wandb:bool, eval_step:int, dataset_name:str):
+    if use_wandb:
+        # Log evaluation metrics with dataset name prefix
         wandb.log({
-            "eval/accuracy": eval_metrics["accuracy"],
-            "eval/reward": eval_metrics["reward"],
-            "eval/format_reward": eval_metrics["format_reward"],
-            "eval/answer_reward": eval_metrics["answer_reward"],
-            "eval/avg_response_length/total": eval_metrics["avg_response_length/total"],
-            "eval/avg_response_length/correct": eval_metrics["avg_response_length/correct"],
-            "eval/avg_response_length/incorrect": eval_metrics["avg_response_length/incorrect"],
+            f"eval/{dataset_name}/accuracy": eval_metrics["accuracy"],
+            f"eval/{dataset_name}/reward": eval_metrics["reward"],
+            f"eval/{dataset_name}/format_reward": eval_metrics["format_reward"],
+            f"eval/{dataset_name}/answer_reward": eval_metrics["answer_reward"],
+            f"eval/{dataset_name}/avg_response_length/total": eval_metrics["avg_response_length/total"],
+            f"eval/{dataset_name}/avg_response_length/correct": eval_metrics["avg_response_length/correct"],
+            f"eval/{dataset_name}/avg_response_length/incorrect": eval_metrics["avg_response_length/incorrect"],
             "eval_step": eval_step,
         })
     
-    logger.info(f"  Accuracy: {eval_metrics['accuracy']:.4f}")
-    logger.info(f"  Reward: {eval_metrics['reward']:.4f}")
-    logger.info(f"  Avg Response Length: {eval_metrics['avg_response_length/total']:.1f}")
-    logger.info(f"  Avg Length (Correct): {eval_metrics['avg_response_length/correct']:.1f}")
-    logger.info(f"  Avg Length (Incorrect): {eval_metrics['avg_response_length/incorrect']:.1f}")
+    logger.info(f"  [{dataset_name}] Accuracy: {eval_metrics['accuracy']:.4f}")
+    logger.info(f"  [{dataset_name}] Reward: {eval_metrics['reward']:.4f}")
+    logger.info(f"  [{dataset_name}] Avg Response Length: {eval_metrics['avg_response_length/total']:.1f}")
+    logger.info(f"  [{dataset_name}] Avg Length (Correct): {eval_metrics['avg_response_length/correct']:.1f}")
+    logger.info(f"  [{dataset_name}] Avg Length (Incorrect): {eval_metrics['avg_response_length/incorrect']:.1f}")
 
 
 @hydra.main(version_base=None, config_path="../conf", config_name="sft_config")
@@ -243,17 +218,18 @@ def train(cfg: ScriptArguments):
     # Load prompt template
     prompt_template = load_prompt_template(cfg.data.prompt_name)
     
-    # Load datasets
-    train_dataset = SFTDataset(
-        cfg.data.train_data_path,
-        prompt_template,
-        num_examples=cfg.data.num_train_examples,
-    )
-    val_dataset = SFTDataset(
-        cfg.data.val_data_path,
-        prompt_template,
-        num_examples=None,  # Use all validation examples
-    )
+    # Load train dataset
+    train_dataset = get_dataset({
+        'path': "json", 'data_files': cfg.data.train_data_path, 'split': "train"
+    }, prompt_template, cfg.data.num_train_examples)
+    
+    # Load multiple validation datasets
+    logger.info("Loading validation datasets...")
+    val_datasets = {}
+    for dataset_name, dataset_cfg in cfg.val_datasets.items():
+        logger.info(f"Loading validation dataset: {dataset_name}")
+        val_dataset = get_dataset(dataset_cfg, prompt_template, cfg.evaluation.max_eval_examples)
+        val_datasets[dataset_name] = val_dataset
     
     # Create dataloader
     train_loader = DataLoader(
@@ -340,7 +316,7 @@ def train(cfg: ScriptArguments):
             token_entropy = output["token_entropy"]
             
             # Calculate loss
-            loss, metadata = sft_microbatch_train_step(
+            loss, _ = sft_microbatch_train_step(
                 policy_log_probs=policy_log_probs,
                 response_mask=response_mask,
                 gradient_accumulation_steps=cfg.training.gradient_accumulation_steps,
@@ -400,21 +376,27 @@ def train(cfg: ScriptArguments):
                     # Load current policy weights into VLLMClient
                     vllm_client.update_model_params(model)
                     
-                    # Evaluate using VLLMClient
-                    eval_metrics = evaluate_model(
-                        vllm_client, tokenizer, val_dataset, generation_kwargs, 
-                        cfg.evaluation.max_eval_examples,
-                    )
-                    
                     eval_step += 1
                     
-                    log_eval_metrics(eval_metrics, cfg, eval_step)
+                    # Evaluate on all validation datasets
+                    all_eval_metrics = {}
+                    for dataset_name, val_dataset in val_datasets.items():
+                        logger.info(f"Evaluating on {dataset_name}...")
+                        eval_metrics = evaluate_model(
+                            vllm_client, tokenizer, val_dataset,
+                            generation_kwargs, cfg.evaluation.eval_n_times,
+                        )
+                        all_eval_metrics[dataset_name] = eval_metrics
+                        log_eval_metrics(eval_metrics, cfg.logging.use_wandb, eval_step, dataset_name)
                     
-                    # Save best model
-                    if eval_metrics["accuracy"] > best_accuracy:
-                        best_accuracy = eval_metrics["accuracy"]
+                    # Save best model based on first dataset's accuracy
+                    first_dataset_name = list(val_datasets.keys())[0]
+                    first_dataset_accuracy = all_eval_metrics[first_dataset_name]["accuracy"]
+                    
+                    if first_dataset_accuracy > best_accuracy:
+                        best_accuracy = first_dataset_accuracy
                         best_model_dir = output_dir / "best_model"
-                        logger.info(f"New best accuracy: {best_accuracy:.4f}. Saving to {best_model_dir}")
+                        logger.info(f"New best accuracy on {first_dataset_name}: {best_accuracy:.4f}. Saving to {best_model_dir}")
                         model.save_pretrained(best_model_dir)
                         tokenizer.save_pretrained(best_model_dir)
 

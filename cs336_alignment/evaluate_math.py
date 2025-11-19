@@ -271,7 +271,7 @@ def main(cfg: ScriptArguments):
     prompt_template = load_prompt_template(cfg.prompt_name)
     
     datasets = {}
-    for dataset_name, dataset_cfg in cfg.datasets.items():
+    for dataset_name, dataset_cfg in cfg.val_datasets.items():
         logger.info(f"Processing dataset: {dataset_name}")
         dataset = load_dataset(**dataset_cfg)
         dataset = dataset.map(

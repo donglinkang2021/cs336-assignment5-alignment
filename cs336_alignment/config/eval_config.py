@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Dict, Optional
 
 # --- Hydra Dataclasses for Config Type-Hinting ---
 @dataclass
@@ -27,7 +27,7 @@ class GenerationConfig:
 class ScriptArguments:
     backend: str
     model: ModelConfig
-    datasets: List[DatasetConfig]
+    val_datasets: Dict[str, DatasetConfig]
     prompt_name: str
     generation: GenerationConfig
     output_dir: str

@@ -3,7 +3,7 @@ Configuration dataclasses for SFT training script using Hydra.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Dict, Optional
 
 
 @dataclass
@@ -16,10 +16,17 @@ class ModelConfig:
 
 
 @dataclass
+class ValidationDatasetConfig:
+    """Configuration for a single validation dataset."""
+    path: str = "json"
+    data_files: str = ""
+    split: str = "train"
+
+
+@dataclass
 class DataConfig:
     """Data configuration."""
     train_data_path: str = "data/OMR12k/train.jsonl"
-    val_data_path: str = "data/OMR12k/validation.jsonl"
     num_train_examples: Optional[int] = None
     prompt_name: str = "r1_zero"
 
@@ -45,6 +52,7 @@ class EvaluationConfig:
     eval_steps: int = 500
     save_steps: int = 1000
     max_eval_examples: int = 100
+    eval_n_times: int = 1
     use_vllm_eval: bool = True
     generation_temperature: float = 1.0
     generation_top_p: float = 1.0
@@ -64,6 +72,7 @@ class ScriptArguments:
     """Main configuration container for SFT training."""
     model: ModelConfig = field(default_factory=ModelConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    val_datasets: Dict[str, ValidationDatasetConfig] = field(default_factory=dict)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     evaluation: EvaluationConfig = field(default_factory=EvaluationConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
