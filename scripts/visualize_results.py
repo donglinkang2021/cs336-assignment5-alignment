@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-import argparse
 
 
 def load_summary(result_dir: Path) -> Dict:
@@ -53,7 +52,8 @@ def collect_results(base_dir: Path, model_prefix: str) -> Dict:
             results[config_key] = {}
             
             # Load results for each dataset
-            datasets = ['competition_math', 'gsm8k', 'math500']
+            datasets = ['competition_math_500', 'competition_math_5k', 'gsm8k', 'math500', 
+                       'amc', 'aime', 'aime22', 'aime23', 'aime24', 'aime25']
             for dataset in datasets:
                 summary = load_summary(model_dir / dataset)
                 if summary and 'aggregate_metrics' in summary:
@@ -78,8 +78,10 @@ def plot_grouped_bar_chart(results: Dict, output_path: Path, title: str):
         print("No results to plot!")
         return
     
-    datasets = ['competition_math', 'gsm8k', 'math500']
-    dataset_labels = ['Competition Math', 'GSM8K', 'MATH500']
+    datasets = ['competition_math_500', 'competition_math_5k', 'gsm8k', 'math500', 
+               'amc', 'aime', 'aime22', 'aime23', 'aime24', 'aime25']
+    dataset_labels = ['MATH-500', 'MATH-5k', 'GSM8K', 'MATH500', 
+                     'AMC', 'AIME', 'AIME22', 'AIME23', 'AIME24', 'AIME25']
     
     # Sort configurations by temperature, then top_p
     configs = sorted(results.keys())
@@ -133,8 +135,10 @@ def plot_comparison_chart(results_by_model: Dict[str, Dict[Tuple[float, float], 
         print("No results to plot!")
         return
 
-    datasets = ['competition_math', 'gsm8k', 'math500']
-    dataset_labels = ['Competition Math', 'GSM8K', 'MATH500']
+    datasets = ['competition_math_500', 'competition_math_5k', 'gsm8k', 'math500', 
+               'amc', 'aime', 'aime22', 'aime23', 'aime24', 'aime25']
+    dataset_labels = ['MATH-500', 'MATH-5k', 'GSM8K', 'MATH500', 
+                     'AMC', 'AIME', 'AIME22', 'AIME23', 'AIME24', 'AIME25']
 
     # All configs across all models (sorted)
     all_configs = sorted({c for r in results_by_model.values() for c in r.keys()})
@@ -278,6 +282,118 @@ def plot_multi(
         title=title
     )
 
+
+def plot_all_models_by_dataset(
+    base_dir: str = 'eval_results2',
+    output_dir: str = 'images',
+    title_prefix: str = 'Model Comparison by Dataset'
+):
+    """
+    Plot all 6 models grouped by dataset.
+    Each dataset is a group, and within each group, models are shown from left to right:
+    Qwen2.5-Math-1.5B, Qwen2.5-Math-1.5B-Instruct, DeepSeek-R1-Distill-Qwen-1.5B,
+    Qwen2.5-Math-7B, Qwen2.5-Math-7B-Instruct, DeepSeek-R1-Distill-Qwen-7B
+    
+    Saves one figure per configuration.
+    """
+    base_dir = Path(base_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True)
+    
+    # Model prefixes in the desired order
+    model_prefixes = [
+        'Qwen2.5-Math-1.5B',
+        'Qwen2.5-Math-1.5B-Instruct',
+        'DeepSeek-R1-Distill-Qwen-1.5B',
+        'Qwen2.5-Math-7B',
+        'Qwen2.5-Math-7B-Instruct',
+        'DeepSeek-R1-Distill-Qwen-7B'
+    ]
+    
+    # Collect results for all models
+    print(f"Collecting results from {base_dir}...")
+    results_by_model = {}
+    for prefix in model_prefixes:
+        results = collect_results(base_dir, prefix)
+        if results:
+            results_by_model[prefix] = results
+            print(f"  Found {len(results)} configurations for {prefix}")
+    
+    if not results_by_model:
+        print("No results found!")
+        return
+    
+    # Get all unique configurations across all models
+    all_configs = sorted({c for r in results_by_model.values() for c in r.keys()})
+    print(f"\nFound configurations: {all_configs}")
+    
+    # Datasets
+    datasets = ['competition_math_500', 'competition_math_5k', 'gsm8k', 'math500', 
+               'amc', 'aime', 'aime22', 'aime23', 'aime24', 'aime25']
+    dataset_labels = ['MATH-500', 'MATH-5k', 'GSM8K', 'MATH500', 
+                     'AMC', 'AIME', 'AIME22', 'AIME23', 'AIME24', 'AIME25']
+    
+    # Colors for each model (6 models)
+    model_colors = ['#2E86AB', '#4ECDC4', '#FF6B6B', '#95E1D3', '#F38181', '#AA96DA']
+    
+    # Create a separate figure for each configuration
+    for config_idx, config in enumerate(all_configs):
+        fig, ax = plt.subplots(1, 1, figsize=(12, 6))
+        
+        temp, top_p = config
+        
+        # For each dataset group
+        x = np.arange(len(datasets)) * 1.5
+        width = 0.2 # Width of each bar (adjusted for 6 models)
+        
+        # Plot bars for each model
+        for model_idx, model_prefix in enumerate(model_prefixes):
+            model_results = results_by_model.get(model_prefix, {})
+            config_results = model_results.get(config, {})
+            
+            accuracies = [config_results.get(dataset, 0.0) for dataset in datasets]
+            offset = width * (model_idx - 2.5)  # Center the bars around each dataset
+            
+            # Shorten model name for legend
+            model_short = model_prefix.replace('Qwen2.5-Math-', 'Q2.5-M-').replace('DeepSeek-R1-Distill-Qwen-', 'DS-R1-Distill-Q-')
+            
+            bars = ax.bar(x + offset, accuracies, width, 
+                         label=model_short, 
+                         color=model_colors[model_idx], 
+                         alpha=0.85)
+            
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                if height > 0:
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.2f}',
+                           ha='center', va='bottom', fontsize=8, rotation=90)
+        
+        # Customize plot
+        ax.set_ylabel('Accuracy (Answer Reward)', fontsize=13, fontweight='bold')
+        # ax.set_xlabel('Datasets', fontsize=13, fontweight='bold')
+        title = f'{title_prefix} - Temperature={temp:.1f}, Top-p={top_p:.2f}'
+        ax.set_title(title, fontsize=15, fontweight='bold', pad=15)
+        ax.set_xticks(x)
+        ax.set_xticklabels(dataset_labels, fontsize=11, rotation=0, ha='center')
+        ax.legend(loc='upper right', fontsize=10, ncol=1)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Set y-axis limit
+        max_val = max([max(results_by_model[m].get(config, {}).values() or [0]) 
+                      for m in model_prefixes if m in results_by_model], default=0)
+        ax.set_ylim(0, max_val * 1.15 if max_val > 0 else 1.0)
+        
+        plt.tight_layout()
+        
+        # Save figure with configuration in filename
+        output_path = output_dir / f'all_models_comparison_T{temp:.1f}_p{top_p:.2f}.png'
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Saved plot to {output_path}")
+        plt.close()
+
+
 if __name__ == '__main__':
     # plot_single(
     #     model_prefix="Qwen/Qwen2.5-Math-1.5B",
@@ -287,10 +403,17 @@ if __name__ == '__main__':
     #     model_prefix="Qwen/Qwen2.5-Math-1.5B-Instruct",
     #     title="Instruct Model: Temperature and Top-p Comparison"
     # )
-    plot_multi(
-        base_prefix='Qwen/Qwen2.5-Math-1.5B',
-        instr_prefix='Qwen/Qwen2.5-Math-1.5B-Instruct',
-        title='Base vs Instruct: Temperature/Top-p Comparison'
+    # plot_multi(
+    #     base_prefix='Qwen/Qwen2.5-Math-1.5B',
+    #     instr_prefix='Qwen/Qwen2.5-Math-1.5B-Instruct',
+    #     title='Base vs Instruct: Temperature/Top-p Comparison'
+    # )
+    
+    # Plot all 6 models grouped by dataset
+    plot_all_models_by_dataset(
+        base_dir='eval_results2',
+        output_dir='images',
+        title_prefix='All Models Comparison'
     )
     
 
