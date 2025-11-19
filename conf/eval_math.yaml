@@ -1,5 +1,5 @@
 defaults:
-  - datasets:
+  - val_datasets:
     - competition_math
     - math500
   - _self_

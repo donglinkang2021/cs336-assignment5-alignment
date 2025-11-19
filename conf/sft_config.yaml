@@ -1,4 +1,11 @@
 
+defaults:
+  - val_datasets:
+    - math500
+    - competition_math_500
+    - gsm8k
+  - _self_
+
 model:
   model_name_or_path: models/Qwen2.5-Math-1.5B
   dtype: bfloat16
@@ -7,7 +14,6 @@ model:
 
 data:
   train_data_path: data/OMR12k-formated/train.jsonl
-  val_data_path: data/OMR12k-formated/validation.jsonl
   num_train_examples: null
   prompt_name: r1_zero
 
@@ -27,9 +33,10 @@ evaluation:
   eval_steps: 50
   save_steps: 100
   max_eval_examples: 100
+  eval_n_times: 1
   use_vllm_eval: true
-  generation_temperature: 1.0
-  generation_top_p: 1.0
+  generation_temperature: 0.6
+  generation_top_p: 0.95
   generation_max_tokens: 32768
 
 logging:

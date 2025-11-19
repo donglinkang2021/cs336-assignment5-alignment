@@ -6,10 +6,18 @@ model:
 
 data:
   train_data_path: data/OMR12k-2048/train.jsonl
-  val_data_path: data/OMR12k-2048/validation.jsonl
+
+val_datasets:
+  - omr12k_2048
+  - omr12k_4096
+  - math500
+  - competition_math_500
+  - gsm8k
+  - aime
+  - amc
 
 training:
-  output_dir: ckpt/exp_sft_omr2048_12k
+  output_dir: ckpt/exp1_sft_omr2048_12k
   batch_size: 16
   gradient_accumulation_steps: 4
 
@@ -21,6 +29,6 @@ evaluation:
 logging:
   use_wandb: true
   wandb_project: cs336-assignment5-alignment
-  wandb_run_name: exp_sft_omr2048_12k
+  wandb_run_name: exp1_sft_omr2048_12k
 
-# uv run cs336_alignment/train_sft.py --config-name exp_sft_omr2048_12k
+# uv run cs336_alignment/train_sft.py --config-name exp1_sft_omr2048_12k

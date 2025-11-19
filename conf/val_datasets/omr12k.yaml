@@ -1,0 +1,5 @@
+# OMR12k Validation Dataset Configuration
+omr12k:
+  path: "json"
+  data_files: "data/OMR12k-formated/validation.jsonl"
+  split: "train"
