@@ -1,20 +1,20 @@
 defaults:
   - sft_config
+  - val_datasets:
+    - omr12k_2048
+    - omr12k_4096
+    - math500
+    - competition_math_500
+    - gsm8k
+    - aime
+    - amc
+  - _self_
 
 model:
   attn_implementation: flash_attention_2
 
 data:
   train_data_path: data/OMR12k-formated/train.jsonl
-
-val_datasets:
-  - omr12k_2048
-  - omr12k_4096
-  - math500
-  - competition_math_500
-  - gsm8k
-  - aime
-  - amc
 
 training:
   output_dir: ckpt/exp1_sft_omr_12k

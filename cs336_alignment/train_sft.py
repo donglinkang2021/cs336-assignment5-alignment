@@ -100,7 +100,7 @@ def evaluate_model(
     eval_n_times: int
 ) -> Dict:    
     logger.info(f"Generating responses for {len(dataset)} validation examples...")
-    output = vllm_client.generate(dataset["prompt"], n=eval_n_times, generation_kwargs=generation_kwargs)
+    output = vllm_client.generate(list(dataset["prompt"]), n=eval_n_times, generation_kwargs=generation_kwargs)
     responses = tokenizer.batch_decode(output["completion_ids"], skip_special_tokens=True)
     
     # Evaluate responses and collect detailed metrics
