@@ -26,6 +26,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
     "math-verify[antlr4-11-0]>=0.8.0",
+    "flashinfer-python>=0.5.3",
 ]
 
 [tool.setuptools.packages.find]
