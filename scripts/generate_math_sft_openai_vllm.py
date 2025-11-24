@@ -44,6 +44,7 @@ async def generate_for_dataset(client, model_name, max_samples=None, resume=True
     # Load the train split of the competition_math dataset
     print("Loading dataset qwedsacf/competition_math (train split)...")
     ds = load_dataset("qwedsacf/competition_math", split="train")
+    # ds = load_dataset("json",data_files="data/math-r1-cot/missing_samples.jsonl",split="train")
     if max_samples:
         max_samples = min(max_samples, len(ds))
         ds = ds.select(range(max_samples))
@@ -101,7 +102,7 @@ async def generate_for_dataset(client, model_name, max_samples=None, resume=True
                 resp = await client.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=12288,
+                    max_tokens=32768,
                     temperature=0.6,
                     top_p=0.95,
                     extra_body={
@@ -212,21 +213,90 @@ async def main_async(args):
         concurrency=args.concurrency
     )
 
+def check_missing_samples(max_samples=None):
+    """
+    Check which samples from the original dataset are missing in the generated file
+    
+    Args:
+        max_samples: Maximum number of samples to check (None for all)
+    """
+    print("Loading original dataset qwedsacf/competition_math (train split)...")
+    ds = load_dataset("qwedsacf/competition_math", split="train")
+    if max_samples:
+        max_samples = min(max_samples, len(ds))
+        ds = ds.select(range(max_samples))
+    
+    out_file = Path("data/math-r1-cot/sft.jsonl")
+    
+    # Load generated samples
+    generated_questions = set()
+    if out_file.exists():
+        print(f"Loading generated data from {out_file}...")
+        with open(out_file, "r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    record = json.loads(line.strip())
+                    question = record.get("question", record.get("problem", ""))
+                    generated_questions.add(hash(question))
+                except Exception as e:
+                    print(f"Warning: Failed to parse line: {e}")
+    else:
+        print(f"Output file {out_file} does not exist!")
+        return
+    
+    # Find missing samples
+    missing_samples = []
+    for idx, sample in enumerate(ds):
+        question = sample.get("problem", sample.get("question", ""))
+        ground_truth = sample.get("solution", sample.get("answer", ""))
+        if hash(question) not in generated_questions:
+            missing_samples.append({
+                "index": idx,
+                "question": question,
+                "answer": ground_truth,
+            })
+    
+    # Print statistics
+    print(f"\n{'='*60}")
+    print(f"Dataset Statistics:")
+    print(f"  Total samples in dataset: {len(ds)}")
+    print(f"  Generated samples: {len(generated_questions)}")
+    print(f"  Missing samples: {len(missing_samples)}")
+    print(f"  Coverage: {len(generated_questions)/len(ds)*100:.2f}%")
+    print(f"{'='*60}\n")
+    
+    if missing_samples:
+        print(f"Missing samples (first 20):")
+        for item in missing_samples[:20]:
+            print(f"  Index {item['index']}: {item['question']}")
+        
+        # Save missing samples to file
+        missing_file = Path("data/math-r1-cot/missing_samples.jsonl")
+        missing_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(missing_file, "w", encoding="utf-8") as f:
+            for item in missing_samples:
+                f.write(json.dumps({"index": item["index"], "question": item["question"]}, ensure_ascii=False) + "\n")
+        print(f"\nAll missing samples saved to {missing_file}")
+    else:
+        print("✓ No missing samples! All dataset samples have been generated.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate math solutions using AsyncOpenAI client")
     parser.add_argument("--max-samples", type=int, default=None, help="Limit number of samples to process")
     parser.add_argument("--no-resume", action="store_true", help="Start from scratch instead of resuming")
     parser.add_argument("--concurrency", type=int, default=16, help="Number of concurrent requests (default: 16)")
+    parser.add_argument("--check-missing", action="store_true", help="Check for missing samples instead of generating")
     args = parser.parse_args()
 
-    asyncio.run(main_async(args))
+    if args.check_missing:
+        check_missing_samples(max_samples=args.max_samples)
+    else:
+        asyncio.run(main_async(args))
 
 
 if __name__ == "__main__":
     main()
 
 # Usage examples:
-# uv run scripts/generate_math_sft_openai_vllm.py
-# uv run scripts/generate_math_sft_openai_vllm.py --concurrency 20
-# uv run scripts/generate_math_sft_openai_vllm.py --max-samples 100 --concurrency 10
+# uv run scripts/generate_math_sft_openai_vllm.py --check-missing
