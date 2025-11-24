@@ -6,5 +6,5 @@ uv run vllm serve /inspire/hdd/global_public/public_models/deepseek-ai/DeepSeek-
   --gpu-memory-utilization=0.90 \
   --enable-prefix-caching \
   --enable-chunked-prefill \
-  --max-model-len=65536 \
+  --max-model-len=16384 \
   --enable-expert-parallel
